@@ -78,11 +78,15 @@ const byExpiry = (a: Batch, b: Batch) =>
   (a.expiresOn ?? '9999').localeCompare(b.expiresOn ?? '9999') || Date.parse(a.addedAt) - Date.parse(b.addedAt)
 
 /** Replays every event up to and including `upTo`. */
-export function replay(ev: PantryEvents, upTo: Day): { remaining: Map<string, number>; shortfalls: Shortfall[] } {
+export function replay(
+  ev: PantryEvents,
+  upTo: Day,
+): { remaining: Map<string, number>; shortfalls: Shortfall[]; consumed: { mealId: string; batchId: string; qty: number }[] } {
   const snap = ev.snapshot
   const snapAt = snap ? Date.parse(snap.takenAt) : -Infinity
   const remaining = new Map<string, number>(snap?.batches.map((b) => [b.batchId, b.qty]))
   const shortfalls: Shortfall[] = []
+  const consumed: { mealId: string; batchId: string; qty: number }[] = []
   const left = (id: string) => remaining.get(id) ?? 0
 
   // Batches with stock, soonest expiry first. With `day`, only those still usable that day.
@@ -91,10 +95,11 @@ export function replay(ev: PantryEvents, upTo: Day): { remaining: Map<string, nu
       .filter((b) => b.ingredientId === ingredientId && left(b.id) > EPS && (day === null || b.expiresOn === null || b.expiresOn >= day))
       .sort(byExpiry)
 
-  const take = (batches: Batch[], qty: number) => {
+  const take = (batches: Batch[], qty: number, mealId?: string) => {
     for (const b of batches) {
       const t = Math.min(qty, left(b.id))
       remaining.set(b.id, left(b.id) - t)
+      if (mealId && t > 0) consumed.push({ mealId, batchId: b.id, qty: t })
       qty -= t
       if (qty <= EPS) return 0
     }
@@ -104,7 +109,7 @@ export function replay(ev: PantryEvents, upTo: Day): { remaining: Map<string, nu
   const eat = (m: Meal) => {
     for (const l of m.lines) {
       if (l.qtyPerPortion === null) continue
-      const missing = take(fefo(l.ingredientId, m.date), l.qtyPerPortion * m.portions)
+      const missing = take(fefo(l.ingredientId, m.date), l.qtyPerPortion * m.portions, m.id)
       if (missing > EPS) shortfalls.push({ mealId: m.id, ingredientId: l.ingredientId, missing })
     }
   }
@@ -131,7 +136,7 @@ export function replay(ev: PantryEvents, upTo: Day): { remaining: Map<string, nu
     .sort((x, y) => x.day.localeCompare(y.day) || x.rank - y.rank || x.at - y.at)
     .forEach((s) => s.run())
 
-  return { remaining, shortfalls }
+  return { remaining, shortfalls, consumed }
 }
 
 export function stockByIngredient(ev: PantryEvents, remaining: Map<string, number>): Map<string, number> {

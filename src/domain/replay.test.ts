@@ -106,6 +106,20 @@ describe('replay', () => {
   })
 })
 
+describe('replay consumed', () => {
+  it('records what each meal took from which batch, skipping zero takes', () => {
+    const e = ev({
+      batches: [batch('fresh', 200, '2026-11-01', '2026-11-10'), batch('dry', 500, '2026-11-01')],
+      meals: [meal('m1', '2026-11-05', 3, pasta80), meal('m2', '2026-11-06', 2, pasta80)],
+    })
+    expect(replay(e, '2026-11-30').consumed).toEqual([
+      { mealId: 'm1', batchId: 'fresh', qty: 200 },
+      { mealId: 'm1', batchId: 'dry', qty: 40 },
+      { mealId: 'm2', batchId: 'dry', qty: 160 },
+    ])
+  })
+})
+
 describe('derived views', () => {
   it('sums stock per ingredient', () => {
     const e = ev({ batches: [batch('a', 100, '2026-11-01'), batch('b', 50, '2026-11-01'), batch('c', 2, '2026-11-01', null, 'eggs')] })
