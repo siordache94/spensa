@@ -41,7 +41,7 @@ export const theme = createTheme({
     }),
     Input: Input.extend({ classNames: { input: 'sp-input' } }),
     InputWrapper: InputWrapper.extend({ classNames: { label: 'sp-input-label' } }),
-    Popover: Popover.extend({ classNames: { dropdown: 'sp-overlay-content' } }),
+    Popover: Popover.extend({ defaultProps: { middlewares: comboboxProps.middlewares, transitionProps: comboboxProps.transitionProps }, classNames: { dropdown: 'sp-overlay-content' } }),
     Select: Select.extend({ defaultProps: { comboboxProps } }),
     Autocomplete: Autocomplete.extend({ defaultProps: { comboboxProps } }),
     MultiSelect: MultiSelect.extend({ defaultProps: { comboboxProps } }),
