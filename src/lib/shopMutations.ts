@@ -22,6 +22,9 @@ export const SHOP_KEY = ['shop'] as const
 export const BUY_KEY = ['shop', 'buy'] as const
 export const ON_HAND_KEY = ['shop', 'on-hand'] as const
 export const CHECK_KEY = ['shop', 'check'] as const
+export const UNBUY_KEY = ['shop', 'unbuy'] as const
+export const UN_ON_HAND_KEY = ['shop', 'un-on-hand'] as const
+export const UNCHECK_KEY = ['shop', 'uncheck'] as const
 
 type Pantry = {
   events: { batches: { id: string; ingredientId: string; qty: number; addedOn: string; addedAt: string; expiresOn: string | null }[] }
@@ -120,6 +123,58 @@ export function registerShopMutations(qc: QueryClient) {
       if (error) throw new Error(error.message)
     },
     onMutate: (id: string) => optimistic(qc, (p, items) => [p, items?.map((i) => (i.id === id ? { ...i, checked: true } : i))]),
+    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
+      rollback(qc, old)
+      fail(e)
+    },
+    onSettled: settled,
+  })
+
+  // Untick: undo a tick done by mistake.
+  qc.setMutationDefaults(UNBUY_KEY, {
+    // Deletes by the client-generated batch id. The batch cascades away its snapshot rows and adjustments.
+    // shortcut: unticking a bought manual item doesn't restore the manual item
+    // (also, buy_shopping_item makes its own batch id, so a queued untick made before that tick synced deletes nothing)
+    mutationFn: async (batchId: string) => {
+      const { error } = await supabase.from('batches').delete().eq('id', batchId)
+      if (error) throw new Error(error.message)
+    },
+    onMutate: (batchId: string) =>
+      optimistic(qc, (p) => [{ ...p, events: { ...p.events, batches: p.events.batches.filter((b) => b.id !== batchId) } }, undefined]),
+    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
+      rollback(qc, old)
+      fail(e)
+    },
+    onSettled: settled,
+  })
+
+  qc.setMutationDefaults(UN_ON_HAND_KEY, {
+    mutationFn: async (ingredientId: string) => {
+      const { error } = await supabase.from('ingredients').update({ on_hand: false }).eq('id', ingredientId)
+      if (error) throw new Error(error.message)
+    },
+    onMutate: (id: string) =>
+      optimistic(qc, (p) => [
+        {
+          ...p,
+          domainIngredients: p.domainIngredients.map((i) => (i.id === id ? { ...i, onHand: false } : i)),
+          ingredients: p.ingredients.map((i) => (i.id === id ? { ...i, on_hand: false } : i)),
+        },
+        undefined,
+      ]),
+    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
+      rollback(qc, old)
+      fail(e)
+    },
+    onSettled: settled,
+  })
+
+  qc.setMutationDefaults(UNCHECK_KEY, {
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('shopping_items').update({ checked: false }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    onMutate: (id: string) => optimistic(qc, (p, items) => [p, items?.map((i) => (i.id === id ? { ...i, checked: false } : i))]),
     onError: (e: Error, _id: string, old: Snapshot | undefined) => {
       rollback(qc, old)
       fail(e)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Badge, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text, Title, UnstyledButton } from '@mantine/core'
+import { Alert, Autocomplete, Badge, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -7,7 +7,7 @@ import dayjs from 'dayjs'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
-import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, SHOP_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
+import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, SHOP_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { addDays, replay, shoppingList, type Need } from '../domain/replay.ts'
 
 type Unit = Tables<'ingredients'>['unit']
@@ -106,18 +106,14 @@ export default function ShopPage() {
 
   const waiting = useMutationState({ filters: { mutationKey: SHOP_KEY }, select: (m) => m.state.isPaused }).filter(Boolean).length
 
-  const [picked, setPicked] = useState<[DateValue, DateValue] | null>(null)
+  const [days, setDays] = useState('7')
+  const [tasted, setTasted] = useState<string[]>([]) // to-taste ingredients ticked this visit
   const [text, setText] = useState('')
   const [buying, setBuying] = useState<Buy | null>(null)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
 
-  const defaultRange = useMemo<[DateValue, DateValue]>(
-    () => (today ? [dayjs(today).toDate(), dayjs(addDays(today, 6)).toDate()] : [null, null]),
-    [today],
-  )
-  const range = picked ?? defaultRange
-  const from = dayOf(range[0]) ?? today
-  const to = dayOf(range[1]) ?? (from ? addDays(from, 6) : undefined)
+  const from = today
+  const to = today ? addDays(today, Number(days) - 1) : undefined
 
   const needs = useMemo<Need[]>(
     () => (events && domainIngredients && from && to ? shoppingList(events, domainIngredients, from, to) : []),
@@ -133,6 +129,9 @@ export default function ShopPage() {
   const markOnHand = useMutation<void, Error, string>({ mutationKey: ON_HAND_KEY })
   const checkText = useMutation<void, Error, string>({ mutationKey: CHECK_KEY })
   const { mutate: mutateBuy } = buy
+  const unbuy = useMutation<void, Error, string>({ mutationKey: UNBUY_KEY })
+  const unOnHand = useMutation<void, Error, string>({ mutationKey: UN_ON_HAND_KEY })
+  const uncheck = useMutation<void, Error, string>({ mutationKey: UNCHECK_KEY })
 
   const clearChecked = useMutation({
     mutationFn: async () => {
@@ -184,7 +183,7 @@ export default function ShopPage() {
       const ing = byId.get(n.ingredientId)
       if (!ing) continue
       if (n.qty === null) {
-        out.push({ key: `need-${n.ingredientId}`, name: ing.name, category: ing.category, detail: 'to taste', onTick: () => mutateOnHand(n.ingredientId) })
+        out.push({ key: `need-${n.ingredientId}`, name: ing.name, category: ing.category, detail: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
         continue
       }
       const b: Buy = {
@@ -244,6 +243,19 @@ export default function ShopPage() {
   }, [entries])
 
   const checkedTexts = (items.data ?? []).filter((i) => !i.ingredient_id && i.checked)
+  const byId = new Map((ingredients ?? []).map((i) => [i.id, i]))
+  const cart = [
+    ...(events?.batches ?? [])
+      .filter((b) => b.addedOn === today && byId.has(b.ingredientId))
+      .map((b) => {
+        const ing = byId.get(b.ingredientId)!
+        return { key: `batch-${b.id}`, label: `${ing.name} ${amount(b.qty, ing.unit)}`, untick: () => unbuy.mutate(b.id) }
+      }),
+    ...tasted
+      .filter((id) => byId.get(id)?.on_hand)
+      .map((id) => ({ key: `taste-${id}`, label: `${byId.get(id)!.name} (to taste)`, untick: () => unOnHand.mutate(id) })),
+    ...checkedTexts.map((i) => ({ key: `text-${i.id}`, label: i.text ?? '', untick: () => uncheck.mutate(i.id) })),
+  ]
   const failure = pantry.error ?? items.error
 
   if (failure) return <Alert color="red">{failure.message}</Alert>
@@ -260,14 +272,17 @@ export default function ShopPage() {
       <Title order={2}>Shop</Title>
       {waiting > 0 && <Badge color="orange" size="lg">Offline — {waiting} {waiting === 1 ? 'tick' : 'ticks'} waiting</Badge>}
 
-      <DatePickerInput
-        type="range"
-        label="Days"
-        size="lg"
-        firstDayOfWeek={1}
-        value={range}
-        onChange={(v) => setPicked(v as [DateValue, DateValue])}
-      />
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>Buy for</Text>
+        <SegmentedControl
+          size="md"
+          fullWidth
+          value={days}
+          onChange={setDays}
+          data={[{ value: '3', label: '3 days' }, { value: '7', label: '1 week' }, { value: '14', label: '2 weeks' }]}
+        />
+        {to && <Text size="xs" c="dimmed">until {dayjs(to).format('ddd D MMM')}</Text>}
+      </Stack>
 
       <form onSubmit={submitItem}>
         <Group wrap="nowrap" align="flex-end">
@@ -304,18 +319,21 @@ export default function ShopPage() {
         </Stack>
       ))}
 
-      {checkedTexts.length > 0 && (
+      {cart.length > 0 && (
         <Stack gap={0} mt="md">
           <Group justify="space-between">
-            <Text fw={700} size="sm" tt="uppercase" c="dimmed">Checked off</Text>
-            <Button variant="subtle" loading={clearChecked.isPending} onClick={() => clearChecked.mutate()}>
-              Clear checked
-            </Button>
+            <Text fw={700} size="sm" tt="uppercase" c="dimmed">In the cart</Text>
+            {checkedTexts.length > 0 && (
+              <Button variant="subtle" loading={clearChecked.isPending} onClick={() => clearChecked.mutate()}>
+                Clear checked
+              </Button>
+            )}
           </Group>
-          {checkedTexts.map((i) => (
-            <Text key={i.id} size="lg" td="line-through" c="dimmed" py="sm">
-              {i.text}
-            </Text>
+          {cart.map((c) => (
+            <Group key={c.key} wrap="nowrap" gap="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+              <Checkbox size="xl" aria-label={`Put back ${c.label}`} checked onChange={() => c.untick()} />
+              <Text size="lg" c="dimmed">{c.label}</Text>
+            </Group>
           ))}
         </Stack>
       )}
