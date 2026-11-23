@@ -93,3 +93,10 @@
   .sp-dayhead { letter-spacing: 0.08em; font-size: 12px; }
   .sp-dayhead small { display: none; }
 }
+
+/* Meal check-ins (ADR 0005): "didn't cook" is struck through with a caps label; "to confirm" is a yellow square. */
+.sp-mealrow.sp-notcooked .sp-mealname { text-decoration: line-through; text-decoration-thickness: 1px; color: var(--sp-text2); }
+.sp-notcooked-label { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-confirm { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-accent); }
+.sp-confirm::before { content: ''; width: 8px; height: 8px; background: var(--sp-yellow); flex: none; }
+:root[data-spensa-theme='light'] .sp-confirm::before { background: var(--sp-ink); }

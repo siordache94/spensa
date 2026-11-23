@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Group, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core'
+import { TimeInput } from '@mantine/dates'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,6 +9,8 @@ import { supabase } from '../lib/supabase.ts'
 import { PrivacyAndData } from './AccountData.tsx'
 import NotificationSettings from '../components/NotificationSettings.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
+import { useSaveSlotEndTimes, useSlotEndTimes, slotLabel } from '../lib/checkins.ts'
+import { isEndTime } from '../lib/checkin.ts'
 
 function YourName() {
   const queryClient = useQueryClient()
@@ -117,6 +120,41 @@ function HouseholdSettings() {
   )
 }
 
+/** When each slot ends (ADR 0005). The check-in comes 30 minutes later. Shows the default where nothing is stored. */
+function SlotEndTimes() {
+  const { slots, endTimes } = useSlotEndTimes()
+  const save = useSaveSlotEndTimes()
+  const [times, setTimes] = useState<Record<string, string>>({})
+  // a string key, so the effect does not re-run on every render while the query loads
+  const shown = JSON.stringify(endTimes)
+  useEffect(() => setTimes(JSON.parse(shown) as Record<string, string>), [shown])
+  const valid = slots.every((s) => isEndTime(times[s] ?? ''))
+  const changed = slots.some((s) => times[s] !== endTimes[s])
+  return (
+    <Stack gap="md">
+      <Text fw={600} className="sp-label">Meal end times</Text>
+      <Text size="sm" c="dimmed">When each slot ends. Shared with your household.</Text>
+      {slots.map((s) => (
+        <TimeInput
+          key={s}
+          label={slotLabel(s)}
+          value={times[s] ?? ''}
+          error={isEndTime(times[s] ?? '') ? undefined : 'Pick a time'}
+          onChange={(e) => setTimes((t) => ({ ...t, [s]: e.currentTarget.value }))}
+          w={160}
+        />
+      ))}
+      <Button
+        loading={save.isPending}
+        disabled={!valid || !changed}
+        onClick={() => save.mutate(Object.fromEntries(slots.map((s) => [s, times[s]])), { onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }) })}
+      >
+        Save meal end times
+      </Button>
+    </Stack>
+  )
+}
+
 export default function SettingsPage() {
   const [settings, update] = useSettings()
   return (
@@ -124,6 +162,7 @@ export default function SettingsPage() {
       <Title order={2}>Settings</Title>
       <YourName />
       <HouseholdSettings />
+      <SlotEndTimes />
       <NotificationSettings />
       <Text size="sm" c="dimmed">Theme and density are saved on this device only.</Text>
 

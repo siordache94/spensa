@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -16,9 +16,11 @@ import { toBuy } from '../lib/shopList.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
 import { memberLabel, useMembers } from '../lib/members.ts'
+import { finishShopping, invalidateCheckins, slotLabel, useUnreadCheckins } from '../lib/checkins.ts'
 import { changeMessage, diffToBuy, loadAcked, relativeTime, saveAcked, selectedMealIds, tripRange } from '../lib/trip.ts'
 import { itemKey, needKey, resolvedKeys } from '../domain/toBuy.ts'
 import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
+import { finishAnswers, markNotCooked } from '../domain/checkinAnswers.ts'
 import './shop.css'
 
 
@@ -227,6 +229,8 @@ export default function ShopPage() {
   const [text, setText] = useState('')
   const [buying, setBuying] = useState<Buy | null>(null)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
+  const unread = useUnreadCheckins()
+  const [notCooked, setNotCooked] = useState<Set<string>>(() => new Set()) // unread meals the finish dialog marks "didn't cook"
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => { meRef.current = data.session?.user.id ?? null; setMe(meRef.current) })
@@ -308,15 +312,17 @@ export default function ShopPage() {
   const snapshot = useMutation({
     mutationFn: async () => {
       if (!events || !today) throw new Error('Still loading, try again.')
-      const { remaining } = replay(events, today)
+      // unread check-ins are answered here: a meal marked "didn't cook" consumes nothing, so the snapshot must not count it
+      const answers = finishAnswers(unread.items.map((u) => u.mealId), notCooked)
+      const skipped = new Set(answers.filter((a) => a.answer === 'not_cooked').map((a) => a.meal_id))
+      const { remaining } = replay(markNotCooked(events, skipped), today)
       const batches = [...remaining]
         .filter(([, qty]) => qty > 0)
         .map(([batchId, qty]) => ({ batch_id: batchId, qty: round3(qty) }))
-      const { error } = await supabase.rpc('finish_shopping', { on_date: today, batches })
-      if (error) throw new Error(error.message)
+      await finishShopping(today, batches, answers)
     },
     onSuccess: () => { setSnapshotOpen(false); setEditing(false) },
-    onSettled: () => invalidatePantry(queryClient),
+    onSettled: () => { invalidatePantry(queryClient); invalidateCheckins(queryClient) },
     onError: showError,
   })
 
@@ -572,6 +578,31 @@ export default function ShopPage() {
       <Modal opened={snapshotOpen} onClose={() => setSnapshotOpen(false)} title="Is the rest of the pantry right?">
         <Stack>
           <Text size="sm">Saves what is left of every batch today. Only what you add from now on changes the stock.</Text>
+          {unread.count > 0 && (
+            <Stack gap="xs">
+              <Text fw={600} className="sp-label">
+                {unread.count === 1 ? "1 meal wasn't confirmed" : `${unread.count} meals weren't confirmed`}
+              </Text>
+              {unread.items.map((u) => (
+                <Stack key={u.id} gap={6}>
+                  <Text size="sm">{dayName(u.date)} · {slotLabel(u.slot)} · {u.recipeName ?? 'Deleted recipe'}</Text>
+                  <SegmentedControl
+                    fullWidth
+                    size="xs"
+                    aria-label={`${slotLabel(u.slot)} ${u.recipeName ?? 'meal'}`}
+                    value={notCooked.has(u.mealId) ? 'not_cooked' : 'planned'}
+                    onChange={(v) => setNotCooked((prev) => {
+                      const next = new Set(prev)
+                      if (v === 'not_cooked') next.add(u.mealId)
+                      else next.delete(u.mealId)
+                      return next
+                    })}
+                    data={[{ value: 'planned', label: 'As planned' }, { value: 'not_cooked', label: "Didn't cook" }]}
+                  />
+                </Stack>
+              ))}
+            </Stack>
+          )}
           <Button size="lg" loading={snapshot.isPending} onClick={() => snapshot.mutate()}>
             Yes, save a snapshot
           </Button>

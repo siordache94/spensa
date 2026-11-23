@@ -1,23 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { softDelete } from '../lib/softDelete.ts'
 import { addDays, replay } from '../domain/replay.ts'
 import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
+import { parseCheckinParams, useUnreadCheckins } from '../lib/checkins.ts'
 import UseSoon from './UseSoon.tsx'
 import NotifyPrompt from '../components/NotifyPrompt.tsx'
 import './plan.css'
 import { CookModal, MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
+import { AmountsModal, CheckinSheet, checkinFailure, useCheckinActions } from './CheckinModals.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
-type Marker = { kind: 'short' | 'expiring'; text: string }
+type Marker = { kind: 'expiring'; text: string }
 
 type Dialog =
   | { kind: 'add'; target: Target }
   | { kind: 'portions'; meal: Meal }
   | { kind: 'move' | 'copy'; meal: Meal }
   | { kind: 'cook'; meal: Meal }
+  | { kind: 'checkin'; mealId: string }
+  | { kind: 'amounts'; mealId: string }
   | { kind: 'slots' }
 
 const fmt = (d: string, opts: Intl.DateTimeFormatOptions) =>
@@ -30,9 +35,13 @@ export default function PlanPage() {
   const { household, today, events, ingredients, meals, isPending, error } = usePantry()
   const [weekOffset, setWeekOffset] = useState(0)
   const [dialog, setDialog] = useState<Dialog | null>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
   const move = useWrite()
   const me = useMyId()
   const members = useMembers().data
+  const unread = useUnreadCheckins()
+  const unreadByMeal = useMemo(() => new Map(unread.items.map((u) => [u.mealId, u])), [unread.items])
+  const { answer, notCooked } = useCheckinActions()
 
   const start = today ? addDays(mondayOf(today), weekOffset * 7) : undefined
   const end = start ? addDays(start, 6) : undefined
@@ -43,12 +52,6 @@ export default function PlanPage() {
     const name = (id: string) => ingredients.find((i) => i.id === id)
     const add = (mealId: string, m: Marker) => out.set(mealId, [...(out.get(mealId) ?? []), m])
 
-    for (const s of replay(events, today).shortfalls) {
-      const ing = name(s.ingredientId)
-      const n = Math.round(s.missing * 10) / 10
-      const text = ing?.unit === 'count' ? `${ing.name} × ${n}` : `${ing?.name ?? ''} ${n} ${ing?.unit ?? ''}`.trim()
-      add(s.mealId, { kind: 'short', text: `short: ${text}` })
-    }
     if (end > today) {
       const limit = addDays(today, household.expiring_days)
       const expiry = new Map(events.batches.map((b) => [b.id, b]))
@@ -64,9 +67,35 @@ export default function PlanPage() {
     return out
   }, [events, ingredients, household, today, end])
 
+  // Deep links from a notification (ADR 0005): ?meal=<id>&checkin=<answer>. Handled once, when the meals are in.
+  const linkHandled = useRef(false)
+  useEffect(() => {
+    if (linkHandled.current || !meals) return
+    const link = parseCheckinParams(window.location.search)
+    if (!link) return
+    linkHandled.current = true
+    const url = new URL(window.location.href)
+    url.searchParams.delete('meal')
+    url.searchParams.delete('checkin')
+    history.replaceState(history.state, '', url)
+    if (!meals.some((m) => m.id === link.mealId)) return
+    if (link.answer === 'planned') {
+      answer.mutate({ mealId: link.mealId, answer: 'planned' }, {
+        onSuccess: (done) => notifications.show({ message: done ? 'Marked as cooked' : 'This meal was already answered.' }),
+        onError: checkinFailure,
+      })
+    } else if (link.answer === 'changed') {
+      setDialog({ kind: 'amounts', mealId: link.mealId })
+    } else {
+      setDialog({ kind: 'checkin', mealId: link.mealId })
+    }
+  }, [meals])
+
   if (isPending) return <Loader />
   if (error) return <Alert color="red">{error.message}</Alert>
   if (!household || !today || !start || !end || !meals) return null
+
+  const dialogMeal = dialog && 'mealId' in dialog ? meals.find((m) => m.id === dialog.mealId) : undefined
 
   const inSlot = (t: Target) =>
     meals.filter((m) => m.date === t.date && m.slot === t.slot).sort((a, b) => a.position - b.position)
@@ -121,40 +150,56 @@ export default function PlanPage() {
                 <div key={slot} className={own ? 'sp-slotrow' : 'sp-slotrow sp-ghost'} onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, t)}>
                   <span className="sp-slotname">{slot}</span>
                   <div className="sp-slotmeals">
-                    {inSlot(t).map((m) => (
-                      <Menu key={m.id} withinPortal>
-                        <Menu.Target>
-                          <button
-                            type="button"
-                            className="sp-mealrow"
-                            draggable
-                            title="Drag to another slot; hold Alt while dropping to copy"
-                            onDragStart={(e) => e.dataTransfer.setData('text/plain', m.id)}
-                          >
-                            <span className="sp-mealname">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</span>
-                            {m.cook_id && (() => {
-                              const c = members?.find((x) => x.user_id === m.cook_id)
-                              return c ? <span className="sp-cook"><b>Cook</b> · {memberLabel(c)}</span> : null
-                            })()}
-                            {(markers.get(m.id) ?? []).map((k, i) => (
-                              <span key={i} className={k.kind === 'short' ? 'sp-mark sp-short' : 'sp-mark sp-exp'}>{k.text}</span>
-                            ))}
-                          </button>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                          {me && (
-                            <Menu.Item onClick={() => move.mutate(supabase.from('planned_meals').update({ cook_id: m.cook_id === me ? null : me }).eq('id', m.id))}>
-                              {m.cook_id === me ? "I won't cook" : "I'll cook"}
+                    {inSlot(t).map((m) => {
+                      const toConfirm = unreadByMeal.has(m.id)
+                      return (
+                        // a meal with an unread check-in opens its check-in sheet instead of the menu (see onChange)
+                        <Menu
+                          key={m.id}
+                          withinPortal
+                          opened={menuFor === m.id}
+                          onChange={(open) => setMenuFor(open && !toConfirm ? m.id : null)}
+                        >
+                          <Menu.Target>
+                            <button
+                              type="button"
+                              className={m.not_cooked ? 'sp-mealrow sp-notcooked' : 'sp-mealrow'}
+                              draggable
+                              title="Drag to another slot; hold Alt while dropping to copy"
+                              onClick={toConfirm ? () => setDialog({ kind: 'checkin', mealId: m.id }) : undefined}
+                              onDragStart={(e) => e.dataTransfer.setData('text/plain', m.id)}
+                            >
+                              <span className="sp-mealname">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</span>
+                              {m.cook_id && (() => {
+                                const c = members?.find((x) => x.user_id === m.cook_id)
+                                return c ? <span className="sp-cook"><b>Cook</b> · {memberLabel(c)}</span> : null
+                              })()}
+                              {m.not_cooked && <span className="sp-mark sp-notcooked-label">Didn't cook</span>}
+                              {toConfirm && <span className="sp-mark sp-confirm">To confirm</span>}
+                              {(markers.get(m.id) ?? []).map((k, i) => (
+                                <span key={i} className="sp-mark sp-exp">{k.text}</span>
+                              ))}
+                            </button>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            {me && (
+                              <Menu.Item onClick={() => move.mutate(supabase.from('planned_meals').update({ cook_id: m.cook_id === me ? null : me }).eq('id', m.id))}>
+                                {m.cook_id === me ? "I won't cook" : "I'll cook"}
+                              </Menu.Item>
+                            )}
+                            <Menu.Item onClick={() => setDialog({ kind: 'cook', meal: m })}>Cook…</Menu.Item>
+                            <Menu.Item onClick={() => setDialog({ kind: 'portions', meal: m })}>Change portions</Menu.Item>
+                            <Menu.Item onClick={() => setDialog({ kind: 'amounts', mealId: m.id })}>Edit amounts</Menu.Item>
+                            <Menu.Item onClick={() => notCooked.mutate({ mealId: m.id, value: !m.not_cooked }, { onError: checkinFailure })}>
+                              {m.not_cooked ? 'Cooked' : "Didn't cook"}
                             </Menu.Item>
-                          )}
-                          <Menu.Item onClick={() => setDialog({ kind: 'cook', meal: m })}>Cook…</Menu.Item>
-                          <Menu.Item onClick={() => setDialog({ kind: 'portions', meal: m })}>Change portions</Menu.Item>
-                          <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
-                          <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
-                          <Menu.Item color="red" onClick={() => move.mutate(softDelete('planned_meals', [m.id]))}>Delete</Menu.Item>
-                        </Menu.Dropdown>
-                      </Menu>
-                    ))}
+                            <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
+                            <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
+                            <Menu.Item color="red" onClick={() => move.mutate(softDelete('planned_meals', [m.id]))}>Delete</Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      )
+                    })}
                   </div>
                   <button type="button" className="sp-addmeal" aria-label={`Add to ${slot}`} onClick={() => setDialog({ kind: 'add', target: t })}>+</button>
                 </div>
@@ -175,6 +220,22 @@ export default function PlanPage() {
       )}
       {dialog?.kind === 'cook' && <CookModal meal={dialog.meal} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'slots' && <SlotsModal slots={household.slots} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'checkin' && dialogMeal && (
+        <CheckinSheet
+          meal={dialogMeal}
+          unread={unreadByMeal.has(dialogMeal.id)}
+          onAmounts={() => setDialog({ kind: 'amounts', mealId: dialogMeal.id })}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'amounts' && dialogMeal && (
+        <AmountsModal
+          meal={dialogMeal}
+          unread={unreadByMeal.has(dialogMeal.id)}
+          ingredients={ingredients ?? []}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </Stack>
   )
 }

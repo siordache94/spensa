@@ -27,3 +27,11 @@
 
 /* Ultrawide: content stops growing at 1600px and centres in the space beside the nav. */
 .sp-content { max-width: 1600px; margin-inline: auto; }
+
+/* Meal check-ins (ADR 0005): the unread count on the Plan tab. A hard yellow square with the count, not a dot (DESIGN.md). */
+.sp-tabbadge {
+  position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 4px;
+  display: inline-grid; place-items: center; background: var(--sp-yellow); color: var(--sp-ink);
+  font: 600 11px/1 var(--sp-label); letter-spacing: 0.04em;
+}
+.sp-side .sp-tabbadge { position: static; margin-left: auto; }

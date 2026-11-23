@@ -18,7 +18,7 @@ import PantryPage from './pages/PantryPage.tsx'
 import ShopPage from './pages/ShopPage.tsx'
 import IngredientsPage from './pages/IngredientsPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
-import { useCheckinsSync } from './lib/checkins.ts'
+import { useCheckinsSync, useUnreadCheckins } from './lib/checkins.ts'
 
 const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/', label: 'Plan', end: true, icon: IconCalendarWeek },
@@ -28,11 +28,17 @@ const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/ingredients', label: 'Ingredients', end: false, icon: IconCarrot },
 ]
 
-function NavButton({ to, label, end, icon: NavIcon, side }: (typeof navItems)[number] & { side?: boolean }) {
+function NavButton({ to, label, end, icon: NavIcon, side, badge = 0 }: (typeof navItems)[number] & { side?: boolean; badge?: number }) {
   return (
-    <NavLink to={to} end={end} className="sp-tab">
+    <NavLink
+      to={to}
+      end={end}
+      className="sp-tab"
+      aria-label={badge > 0 ? `${label}, ${badge} ${badge === 1 ? 'meal' : 'meals'} to confirm` : undefined}
+    >
       <NavIcon size={side ? 22 : 24} stroke={1.75} aria-hidden />
       <span>{label}</span>
+      {badge > 0 && <span className="sp-tabbadge" aria-hidden>{badge}</span>}
     </NavLink>
   )
 }
@@ -146,6 +152,8 @@ function HouseholdMenu({ household }: { household: Household }) {
 function Shell({ household }: { household: Household }) {
   useResyncSubscription()
   useCheckinsSync()
+  const unreadMeals = useUnreadCheckins().count
+  const badge = (to: string) => (to === '/' ? unreadMeals : 0)
   return (
     <AppShell
       header={{ height: 'calc(48px + env(safe-area-inset-top, 0px))' }}
@@ -166,7 +174,7 @@ function Shell({ household }: { household: Household }) {
       <AppShell.Navbar className="sp-side">
         <Stack gap={0}>
           {navItems.map((item) => (
-            <NavButton key={item.to} {...item} side />
+            <NavButton key={item.to} {...item} side badge={badge(item.to)} />
           ))}
         </Stack>
       </AppShell.Navbar>
@@ -187,7 +195,7 @@ function Shell({ household }: { household: Household }) {
       <AppShell.Footer hiddenFrom="sm" className="sp-nav">
         <nav className="sp-tabs" aria-label="Primary">
           {navItems.map((item) => (
-            <NavButton key={item.to} {...item} />
+            <NavButton key={item.to} {...item} badge={badge(item.to)} />
           ))}
         </nav>
       </AppShell.Footer>

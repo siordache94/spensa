@@ -69,6 +69,12 @@ export default function NotificationSettings() {
             onChange={(e) => patch({ list_changes: e.currentTarget.checked })}
           />
           <Switch
+            label="Meal check-ins"
+            description="A silent message about 30 minutes after a slot ends, when a meal could not be covered by the pantry: was it cooked as planned? Slot times are under Household."
+            checked={p.meal_checkins}
+            onChange={(e) => patch({ meal_checkins: e.currentTarget.checked })}
+          />
+          <Switch
             label="Expiry reminder"
             description="One message a day listing food that expires soon, if any. How soon is set under Household."
             checked={p.expiry_time !== null}
