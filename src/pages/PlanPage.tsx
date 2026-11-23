@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
+import { ActionIcon, Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { usePantry } from '../lib/api/pantry.ts'
 import { useCommand } from '../lib/api/command.ts'
 import { addMeal, deleteMeal, moveMeal, setMealCook } from '../lib/api/plan.ts'
@@ -32,6 +33,14 @@ const fmt = (d: string, opts: Intl.DateTimeFormatOptions) =>
 
 // Day-of-week of a calendar day string (0 = Sunday), no local timezone involved.
 const mondayOf = (d: string) => addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7))
+
+// Relative name for the shown week: "This week", "Next week", "Last week", "In 2 weeks", "3 weeks ago".
+const relativeWeek = (offset: number) => {
+  if (offset === 0) return 'This week'
+  if (offset === 1) return 'Next week'
+  if (offset === -1) return 'Last week'
+  return offset > 0 ? `In ${offset} weeks` : `${-offset} weeks ago`
+}
 
 export default function PlanPage() {
   const { household, today, events, ingredients, meals, isPending, error } = usePantry()
@@ -127,13 +136,18 @@ export default function PlanPage() {
       <Group justify="space-between" className="sp-ph-a">
         <Title order={2} className="sp-ph-title">
           {fmt(start, { day: 'numeric', month: 'short' })} – {fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}
+          <span className="sp-ph-rel">{relativeWeek(weekOffset)}</span>
         </Title>
         <Button variant="default" size="xs" className="sp-ph-slots" onClick={() => setDialog({ kind: 'slots' })}>Slots</Button>
       </Group>
       <Group className="sp-ph-nav">
-        <Button variant="default" size="xs" onClick={() => setWeekOffset(weekOffset - 1)}>Prev</Button>
+        <ActionIcon variant="default" size={44} aria-label="Previous week" onClick={() => setWeekOffset(weekOffset - 1)}>
+          <IconChevronLeft size={20} />
+        </ActionIcon>
         <Button variant="default" size="xs" onClick={() => setWeekOffset(0)}>This week</Button>
-        <Button variant="default" size="xs" onClick={() => setWeekOffset(weekOffset + 1)}>Next</Button>
+        <ActionIcon variant="default" size={44} aria-label="Next week" onClick={() => setWeekOffset(weekOffset + 1)}>
+          <IconChevronRight size={20} />
+        </ActionIcon>
       </Group>
       </div>
 

@@ -40,6 +40,8 @@
 .sp-inv-amt small { padding-left: 6px; font-size: 14px; font-weight: 400; color: var(--sp-text2); }
 .sp-inv-hint { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; font: 600 12px/1 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); }
 .sp-inv-hint::before { content: ''; width: 6px; height: 6px; background: var(--sp-accent); }
+/* light: a yellow square with an Ink ring (yellow alone is ~1.5:1 on white) */
+:root[data-spensa-theme='light'] .sp-inv-hint:not([data-expired])::before { background: var(--sp-yellow); box-shadow: inset 0 0 0 1px var(--sp-ink); }
 .sp-inv-hint[data-expired] { color: var(--sp-red); }
 .sp-inv-hint[data-expired]::before { background: var(--sp-red); }
 .sp-inv-row .sp-stepper-input { width: 4ch; }

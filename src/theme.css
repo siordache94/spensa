@@ -23,7 +23,7 @@
 }
 :root[data-spensa-theme='light'] {
   --sp-body: #e6e8eb; --sp-panel: #ffffff; --sp-rule: #d3d6da; --sp-edge: #6b7178;
-  --sp-text: #0b0d10; --sp-text2: #4a5058; --sp-red: #d92d2d;
+  --sp-text: #0b0d10; --sp-text2: #4a5058; --sp-red: #b91c1c; /* 5.3:1 on ground #e6e8eb, 6.5:1 on panel */
   --sp-accent: #0b0d10; /* yellow is a fill only on light */ --sp-focus: #0b0d10;
 }
 :root[data-spensa-theme='amoled'] {
@@ -141,6 +141,12 @@ body {
 
 /* Figure columns only */
 .sp-num, .sp-seg-cell > span, .sp-qty, .sp-stepper-value, .sp-stepper-input { font-variant-numeric: tabular-nums lining-nums; }
+
+/* Cue: a yellow-alert word or figure (DESIGN.md, Fill-Only On Paper Rule).
+   Dark/AMOLED: accent yellow text. Light: yellow fill chip with Ink text, since yellow text on paper is ~1.5:1.
+   Set display on the element (inline-block for text runs, so the chip hugs its words). */
+.sp-cue { color: var(--sp-accent); }
+:root[data-spensa-theme='light'] .sp-cue { background: var(--sp-yellow); color: var(--sp-ink); padding: 1px 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 
 /* Who cooks: small caps chip on a planned meal */
 .sp-cook {

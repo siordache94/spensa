@@ -71,7 +71,7 @@
   .sp-day { margin: 0; border: 0; border-block: 0; border-left: 1px solid var(--sp-rule); min-width: 0; }
   .sp-ghost { display: flex; }
   .sp-dayhead { padding: 0 8px; gap: 6px; font-size: 13px; white-space: nowrap; overflow: hidden; }
-  .sp-dayhead small { font-size: 11px; letter-spacing: 0.08em; }
+  .sp-dayhead small { font-size: 12px; letter-spacing: 0.08em; }
 
   .sp-slotrow { position: relative; display: flex; flex-direction: column; align-items: stretch; padding: 6px; gap: 4px; }
   .sp-slotname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
@@ -96,7 +96,16 @@
 
 /* Meal check-ins (ADR 0005): "didn't cook" is struck through with a caps label; "to confirm" is a yellow square. */
 .sp-mealrow.sp-notcooked .sp-mealname { text-decoration: line-through; text-decoration-thickness: 1px; color: var(--sp-text2); }
-.sp-notcooked-label { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
-.sp-confirm { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-accent); }
+.sp-notcooked-label { font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-confirm { font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-accent); }
 .sp-confirm::before { content: ''; width: 8px; height: 8px; background: var(--sp-yellow); flex: none; }
+/* light: yellow chip with Ink text and an Ink marker (Fill-Only On Paper Rule) */
+:root[data-spensa-theme='light'] .sp-confirm { background: var(--sp-yellow); color: var(--sp-ink); padding: 1px 6px; }
 :root[data-spensa-theme='light'] .sp-confirm::before { background: var(--sp-ink); }
+
+/* Week navigator (header): 44px touch targets, relative week label beside the date range */
+.sp-ph-nav .mantine-Button-root, .sp-ph-nav .mantine-ActionIcon-root, .sp-ph-slots.mantine-Button-root { height: 44px; min-width: 44px; }
+.sp-ph-rel {
+  margin-left: 12px; font: 600 13px/1 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2);
+  white-space: nowrap; vertical-align: middle;
+}

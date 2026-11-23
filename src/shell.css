@@ -7,15 +7,17 @@
   font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
   color: var(--sp-accent); border: 1px solid var(--sp-yellow); border-radius: 999px; padding: 5px 9px;
 }
+/* light: a yellow fill with Ink text, not yellow text or an outline on paper */
+:root[data-spensa-theme='light'] .sp-offline { background: var(--sp-yellow); border-color: var(--sp-yellow); color: var(--sp-ink); }
 .sp-hh { color: var(--sp-text); font-weight: 600; min-height: 44px; }
 .sp-nav { background: var(--sp-panel); border-top: 1px solid var(--sp-edge); padding-bottom: env(safe-area-inset-bottom, 0px); padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
 .sp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); height: 100%; }
 .sp-tab {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px;
   color: var(--sp-text2); text-decoration: none; position: relative;
-  font: 600 11px/1 var(--sp-label); letter-spacing: 0.06em; text-transform: uppercase;
+  font: 600 12px/1 var(--sp-label); letter-spacing: 0.06em; text-transform: uppercase;
 }
-@media (max-width: 380px) { .sp-tab { font-size: 10px; letter-spacing: 0.04em; } }
+@media (max-width: 380px) { .sp-tab { font-size: 12px; letter-spacing: 0.02em; } }
 .sp-tab[aria-current='page'] { color: var(--sp-accent); box-shadow: inset 0 -3px 0 var(--sp-yellow); }
 :root[data-spensa-theme='light'] .sp-tab[aria-current='page'] { color: var(--sp-ink); }
 .sp-side { background: var(--sp-panel); border-right: 1px solid var(--sp-edge); padding: 8px 0; }
@@ -32,6 +34,6 @@
 .sp-tabbadge {
   position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 4px;
   display: inline-grid; place-items: center; background: var(--sp-yellow); color: var(--sp-ink);
-  font: 600 11px/1 var(--sp-label); letter-spacing: 0.04em;
+  font: 600 12px/1 var(--sp-label); letter-spacing: 0.04em;
 }
 .sp-side .sp-tabbadge { position: static; margin-left: auto; }

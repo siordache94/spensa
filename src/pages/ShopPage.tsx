@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
+import { ActionIcon, Autocomplete, Button, Checkbox, Group, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
@@ -8,6 +8,9 @@ import dayjs from 'dayjs'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { uuid } from '../lib/uuid.ts'
 import { Stepper } from '../components/Stepper.tsx'
+import { ErrorState } from '../components/ErrorState.tsx'
+import { Loading } from '../components/Loading.tsx'
+import { UndoToast, notBoughtLine, undoMessage } from '../components/UndoToast.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { useCommand } from '../lib/api/command.ts'
 import { usePantryState } from '../lib/api/pantry.ts'
@@ -23,7 +26,7 @@ import { useUnreadCheckins } from '../lib/api/checkins.ts'
 import { changeMessage, diffToBuy, loadAcked, relativeTime, saveAcked, selectedMealIds, tripRange } from '../lib/trip.ts'
 import { resolvedKeys } from '../domain/toBuy.ts'
 import { shoppingList, type Day, type Need } from '../domain/replay.ts'
-import { buildShoppingView, snapshotPlan, type BuyDraft, type Tick, type Untick } from '../domain/shoppingView.ts'
+import { buildShoppingView, snapshotPlan, type BuyDraft, type Entry, type Tick, type Untick } from '../domain/shoppingView.ts'
 import { round3 } from '../lib/format.ts'
 import './shop.css'
 
@@ -78,10 +81,11 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
   )
 }
 
-function Tick({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+/** The square tick. In a row that is itself the button (`decorative`), the box is hidden from AT and skipped by Tab. */
+function Tick({ checked, label, onChange, decorative = false }: { checked: boolean; label: string; onChange: () => void; decorative?: boolean }) {
   return (
-    <span className="sp-tickcell">
-      <Checkbox aria-label={label} checked={checked} onChange={onChange} onClick={(ev) => ev.stopPropagation()} />
+    <span className="sp-tickcell" aria-hidden={decorative || undefined}>
+      <Checkbox aria-label={label} checked={checked} onChange={onChange} onClick={(ev) => ev.stopPropagation()} tabIndex={decorative ? -1 : undefined} />
     </span>
   )
 }
@@ -200,6 +204,7 @@ export default function ShopPage() {
   const [text, setText] = useState('')
   const [buying, setBuying] = useState<Buy | null>(null)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
+  const [undo, setUndo] = useState<{ id: string; message: string; untick: Untick } | null>(null) // the last list tick, undoable for 4 s
   const unread = useUnreadCheckins()
   const [notCooked, setNotCooked] = useState<Set<string>>(() => new Set()) // unread meals the finish dialog marks "didn't cook"
 
@@ -287,11 +292,22 @@ export default function ShopPage() {
   )
   const { groups, entries, cart, partnerLast, checkedTextCount } = view
 
-  /** Runs a row's tick: the offline-capable write, or the to-taste bookkeeping first. */
-  function runTick(t: Tick) {
-    if (t.kind === 'buy') mutateBuy(withIds(t.buy))
-    else if (t.kind === 'toTaste') { setTasted((prev) => [...prev, t.ingredientId]); mutateOnHand(t.ingredientId) }
-    else mutateCheck(t.itemId)
+  /** Runs a row's tick: the offline-capable write, or the to-taste bookkeeping first. Returns the untick that undoes it. */
+  function runTick(t: Tick): Untick {
+    if (t.kind === 'buy') {
+      const b = withIds(t.buy)
+      mutateBuy(b)
+      return { kind: 'unbuy', batchId: b.batchId }
+    }
+    if (t.kind === 'toTaste') { setTasted((prev) => [...prev, t.ingredientId]); mutateOnHand(t.ingredientId); return { kind: 'unOnHand', ingredientId: t.ingredientId } }
+    mutateCheck(t.itemId)
+    return { kind: 'uncheck', itemId: t.itemId }
+  }
+
+  /** A list row's tick, with the undo toast. Cart rows (puts back) do not raise it. */
+  function tickRow(e: Entry) {
+    const untick = runTick(e.tick)
+    setUndo({ id: uuid(), message: undoMessage(e.tick.kind === 'buy' ? 'buy' : e.tick.kind === 'toTaste' ? 'toTaste' : 'checkText', e.name), untick })
   }
 
   function runUntick(u: Untick) {
@@ -312,10 +328,13 @@ export default function ShopPage() {
       items: (items.data ?? []).map((i) => ({ id: i.id, ingredientId: i.ingredient_id, checked: i.checked, boughtBatchId: i.bought_batch_id })),
     })
   }, [events, domainIngredients, today, items.data])
+  // Saved data (persisted cache) is on screen when both queries have it. A failed refresh then gets an inline notice, not a wall.
   const failure = pantry.error ?? items.error
+  const hasData = pantry.events !== undefined && items.data !== undefined
+  const retry = () => { void refreshShop(queryClient) }
 
-  if (failure) return <Alert color="red">{failure.message}</Alert>
-  if (pantry.isPending || items.isPending || !today) return <Center py="xl"><Loader /></Center>
+  if (failure && !hasData) return <ErrorState onRetry={retry} retrying={pantry.isFetching || items.isFetching} />
+  if (pantry.isPending || items.isPending || !today) return <Loading label="Loading list" />
 
   function submitItem(e: FormEvent) {
     e.preventDefault()
@@ -359,6 +378,7 @@ export default function ShopPage() {
         <Button variant="default" size="sm" onClick={() => setEditing(true)}>Edit trip</Button>
       </div>
       <div className="sp-trip">{summary}</div>
+      {failure && <ErrorState variant="inline" onRetry={retry} retrying={pantry.isFetching || items.isFetching} />}
 
       <form className="sp-add" onSubmit={submitItem}>
         <Group wrap="nowrap" align="flex-end">
@@ -377,10 +397,19 @@ export default function ShopPage() {
         <div key={category ?? 'uncategorised'}>
           <div className="sp-band"><span>{category ?? 'Other'}</span><small>{rows.length} to buy</small></div>
           {rows.map((e) => (
-            // the row handles the tap itself: label-to-checkbox forwarding was unreliable on touch
-            <div key={e.key} className="sp-row" onClick={() => runTick(e.tick)}>
-              <Tick checked={false} label={`Bought ${e.name}`} onChange={() => runTick(e.tick)} />
-              <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}{e.pack && <small className="sp-packline">{e.pack}</small>}</span>
+            // the row handles the tap itself: label-to-checkbox forwarding was unreliable on touch.
+            // Enter or Space on the row is the same tap. The pencil inside the row has its own stop, so its keys do not reach here.
+            <div
+              key={e.key}
+              className="sp-row"
+              role="button"
+              tabIndex={0}
+              aria-label={`Bought ${e.name}`}
+              onClick={() => tickRow(e)}
+              onKeyDown={(ev) => { if (ev.target === ev.currentTarget && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); tickRow(e) } }}
+            >
+              <Tick decorative checked={false} label={`Bought ${e.name}`} onChange={() => tickRow(e)} />
+              <span className="sp-name">{e.name}{e.note && <em className="sp-cue">{e.note}</em>}{e.pack && <small className="sp-packline">{e.pack}</small>}</span>
               <Figure figure={e.figure} unit={e.unit} free={e.free} />
               {e.buy ? (
                 <ActionIcon
@@ -409,8 +438,22 @@ export default function ShopPage() {
             )}
           </div>
           {cart.map((c) => (
-            <div key={c.key} className={`sp-row sp-done${c.held ? ' sp-held' : ''}`} style={{ cursor: 'default' }}>
-              <Tick checked label={`Put back ${c.name}`} onChange={() => runUntick(c.untick)} />
+            // a tap puts the row back, as on the list. A partner-ticked row is acknowledged instead: its overlay takes the tap.
+            <div
+              key={c.key}
+              className={`sp-row sp-done${c.held ? ' sp-held' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-label={c.held ? `${c.name}, ticked by partner` : `Put back ${c.name}`}
+              onClick={() => runUntick(c.untick)}
+              onKeyDown={(ev) => {
+                if (ev.target !== ev.currentTarget || (ev.key !== 'Enter' && ev.key !== ' ')) return
+                ev.preventDefault()
+                if (c.held) acknowledge(c.id)
+                else runUntick(c.untick)
+              }}
+            >
+              <Tick decorative checked label={`Put back ${c.name}`} onChange={() => runUntick(c.untick)} />
               <span className="sp-name">
                 {c.name}
                 {c.held && c.at && <em>ticked by partner · {relativeTime(c.at, now)}</em>}
@@ -424,7 +467,8 @@ export default function ShopPage() {
       )}
 
       <div className="sp-finish">
-        <Button size="lg" fullWidth variant="default" disabled={!events} onClick={() => setSnapshotOpen(true)}>
+        {/* primary once nothing is left to buy: the trip is done */}
+        <Button size="lg" fullWidth variant={entries.length === 0 ? 'filled' : 'default'} disabled={!events} onClick={() => setSnapshotOpen(true)}>
           Done shopping
         </Button>
       </div>
@@ -436,7 +480,7 @@ export default function ShopPage() {
           <div className="sp-seg-cell sp-partner">
             <b>Partner</b>
             {partnerLast ? (
-              <span><span className="sp-pname">{partnerLast.name}</span> <small>{relativeTime(partnerLast.addedAt, now)}</small></span>
+              <span><span className="sp-pname sp-cue">{partnerLast.name}</span> <small>{relativeTime(partnerLast.addedAt, now)}</small></span>
             ) : (
               <span>—</span>
             )}
@@ -445,13 +489,23 @@ export default function ShopPage() {
         </div>
       </div>
 
+      {undo && (
+        <UndoToast
+          key={undo.id}
+          message={undo.message}
+          onUndo={() => { runUntick(undo.untick); setUndo(null) }}
+          onExpire={() => setUndo(null)}
+        />
+      )}
+
       {buying && (
         <BuyModal key={buying.shoppingItemId ?? buying.ingredientId} buy={buying} pending={false} onBuy={(b) => { mutateBuy(withIds(b)); setBuying(null) }} onClose={() => setBuying(null)} />
       )}
 
-      <Modal opened={snapshotOpen} onClose={() => setSnapshotOpen(false)} title="Is the rest of the pantry right?">
+      <Modal opened={snapshotOpen} onClose={() => setSnapshotOpen(false)} title="Finish this trip?">
         <Stack>
           <Text size="sm">Saves what is left of every batch today. Only what you add from now on changes the stock.</Text>
+          {notBoughtLine(entries.length) && <Text size="sm" fw={600}>{notBoughtLine(entries.length)}</Text>}
           {unread.count > 0 && (
             <Stack gap="xs">
               <Text fw={600} className="sp-label">
@@ -478,10 +532,10 @@ export default function ShopPage() {
             </Stack>
           )}
           <Button size="lg" loading={snapshot.isPending} onClick={saveSnapshot}>
-            Yes, save a snapshot
+            Finish trip and save pantry
           </Button>
           <Button size="lg" variant="default" onClick={() => setSnapshotOpen(false)}>
-            Not now
+            Keep shopping
           </Button>
         </Stack>
       </Modal>

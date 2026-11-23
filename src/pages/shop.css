@@ -17,7 +17,7 @@
 .sp-cols, .sp-row, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 4px 0 4px; }
 .sp-cols {
   height: 24px; background: var(--sp-panel); border-block: 1px solid var(--sp-edge);
-  font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2);
+  font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2);
 }
 .sp-cols > :nth-child(1) { grid-column: 2; }
 .sp-cols > :nth-child(2) { grid-column: 3; text-align: right; }
@@ -35,7 +35,7 @@
 .sp-name { font-size: var(--name-size); font-weight: 500; line-height: 1.2; color: var(--sp-text); text-align: left; padding: 6px 4px 6px 0; overflow-wrap: anywhere; }
 /* The row ticks; amount editing lives behind this explicit 44px button so a row tap is never ambiguous. */
 .sp-edit { width: 44px; height: 44px; min-width: 44px; color: var(--sp-text2); }
-.sp-name em { display: block; font-style: normal; font-size: 12px; font-weight: 500; color: var(--sp-accent); margin-top: 2px; }
+.sp-name em { display: inline-block; font-style: normal; font-size: 12px; font-weight: 500; margin-top: 2px; }
 .sp-num { font-variant-numeric: tabular-nums lining-nums; text-align: right; font-size: var(--amount-size); font-weight: 600; line-height: 1; }
 .sp-unit { padding-left: 6px; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
 .sp-free { grid-column: 3 / 5; text-align: right; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
@@ -78,9 +78,29 @@
 }
 .sp-seg-cell { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px 12px; border-left: 1px solid var(--sp-edge); min-width: 0; }
 .sp-seg-cell:first-child { border-left: 0; }
-.sp-seg-cell b { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-seg-cell b { font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
 .sp-seg-cell > span { font-variant-numeric: tabular-nums lining-nums; font-size: 19px; font-weight: 600; line-height: 1; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; color: var(--sp-text); overflow: hidden; }
 .sp-seg-cell small { font-size: 12px; font-weight: 400; color: var(--sp-text2); }
-.sp-seg-cell.sp-partner > span { color: var(--sp-accent); }
 .sp-seg-cell.sp-partner .sp-pname { overflow: hidden; text-overflow: ellipsis; }
 .sp-dock-btn { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+
+/* Row keyboard focus: the row (or a control inside it) has focus. */
+.sp-row:focus-visible, .sp-row:has(:focus-visible) { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
+
+/* Undo toast: one bar above the dock. Phones: the dock is 68px + the 64px pass; wide screens: the dock sits in the column. */
+.sp-undo {
+  position: fixed; z-index: 95; left: 8px; right: 8px; bottom: calc(144px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 0 4px 0 16px;
+  background: var(--sp-panel); border: 1px solid var(--sp-edge); border-radius: 12px; color: var(--sp-text);
+  font-size: 16px; font-weight: 500;
+}
+@media (min-width: 48em) {
+  .sp-undo { left: 50%; right: auto; width: min(624px, calc(100% - 32px)); transform: translateX(-50%); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+}
+.sp-undo-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-undo-sep { color: var(--sp-text2); }
+.sp-undo-btn {
+  flex: none; min-width: 44px; min-height: 44px; padding: 0 12px; margin-right: auto; background: none; border: 0; cursor: pointer;
+  font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-accent);
+}
+.sp-undo-btn:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: -2px; }

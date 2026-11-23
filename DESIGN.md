@@ -15,7 +15,7 @@ colors:
   pass-white: "#ffffff"
   pass-hairline: "#d3d6da"
   pass-grey: "#4a5058"
-  pass-red: "#d92d2d"
+  pass-red: "#b91c1c"
   amoled-black: "#000000"
   amoled-panel: "#121212"
   amoled-hairline: "#2a2a2a"
@@ -47,7 +47,7 @@ typography:
     fontFeature: "tnum, lnum"
   label:
     fontFamily: "Barlow Semi Condensed, Arial Narrow, sans-serif"
-    fontSize: "11px"
+    fontSize: "12px"
     fontWeight: 600
     lineHeight: 1
     letterSpacing: "0.14em"
@@ -150,7 +150,8 @@ A near-monochrome ink, slate and steel palette with a single yellow. Values belo
 - **Urgent Red** (#ff4d4d): errors and the "short" square marker on planned meals.
 
 ### Neutral (light, "pass paper")
-- Ground #e6e8eb, panels #ffffff, hairline #d3d6da, steel #6b7178, text Ink #0b0d10, secondary #4a5058, red #d92d2d. Yellow is never used as text: the accent token resolves to Ink (focus ring, active tab label, partner figure, notes).
+- Ground #e6e8eb, panels #ffffff, hairline #d3d6da, steel #6b7178, text Ink #0b0d10, secondary #4a5058, red #b91c1c. Yellow is never used as text: the accent token resolves to Ink (focus ring, active tab label, partner figure, notes).
+- Contrast on paper: Ink on ground 15.9:1, secondary #4a5058 on ground 6.6:1 (8.1:1 on panel), red #b91c1c on ground 5.3:1 (6.5:1 on panel; the earlier #d92d2d was 3.9:1 and failed AA). Yellow on white is 1.55:1, so it is never a text or outline colour there; Ink on yellow is 12.6:1.
 
 ### Neutral (AMOLED)
 - Ground #000000, panels #121212, hairline #2a2a2a, steel #8a8a8a, text #ffffff, secondary #d0d0d0, red #ff4d4d, accent yellow as in dark.
@@ -159,6 +160,7 @@ A near-monochrome ink, slate and steel palette with a single yellow. Values belo
 **The One Alert Rule.** Yellow means attention or active and nothing else. Never a second accent hue; red is reserved for shortfall and error.
 **The Fill-Only On Paper Rule.** On the light theme yellow is a fill behind Ink, never a text or outline colour (contrast). Use `--sp-accent` for anything that must be yellow on dark and Ink on light.
 **The Ink On Yellow Rule.** Any yellow surface carries Ink text, in every theme.
+**The Cue Chip Rule.** A cue that is yellow text on dark (a note, a partner name, "To confirm", today's count, the expiry hint) becomes a yellow fill with Ink text on light: a chip, not a tint. Cues that are yellow squares keep the square on light, filled yellow with a 1px Ink ring. Shared cues use the `.sp-cue` utility in `src/theme.css`: accent text on dark and AMOLED, yellow chip with Ink text on light. Elements that already sit on a yellow fill (today's band, the held row's wash) keep Ink text and need no chip.
 
 ## Typography
 
@@ -173,8 +175,9 @@ A near-monochrome ink, slate and steel palette with a single yellow. Values belo
 - **Body / name** (500, 16px compact or 18px airy, 1.2): item and meal names. Muted notes under a name are 12px 500 in the accent colour.
 - **Figure** (600, 16px compact or 30px airy, tabular lining numerals): amounts, right-aligned. Unit is 14px (16px airy) in secondary grey. Tabular figures are applied only to figure columns; the body default is lining numerals because tabular widens commas and full stops in this face.
 - **Band** (600, 13px, 0.14em, caps, Barlow): category bands and "In the cart" head. Count at the right is 12px, 0.1em.
-- **Day head** (600, 14px, 0.14em, caps, Barlow): plan day bands.
-- **Label** (600, 11px, 0.14em, caps, Barlow): column heads, trip pass cell labels, tab labels (0.06em).
+- **Day head** (600, 14px, 0.14em, caps, Barlow): plan day bands (13px on the 64em+ planner, where they share a row with the controls).
+- **Label** (600, 12px, 0.14em, caps, Barlow): column heads, trip pass cell labels, tab labels (0.06em), slot names, "To confirm" and "Didn't cook" marks. The floor: nothing in the app sets text below 12px.
+- **Small steps:** the 12px step is for caps sub-labels and sub-lines (labels, slot names, counts, pack hints, "Today" in a day head, the expiry hint, tab badges). The 14px step is for running text and units: prose notes (max 65ch), day heads, the unit beside a figure, the meal name on the planner. Neither step adds a new weight or face; they sit between the 13px band and the 16px body on the ramp.
 - **Trip line** (600, 13px, 0.08em, caps, Barlow, secondary): date range and meal count under the title.
 - **Pass figure** (600, 19px, tabular): the four trip-pass values.
 - Prose notes are 14px with max 65ch.
@@ -189,7 +192,7 @@ Mobile first, one column. The shop list is full-bleed: rows and bands run edge t
 
 Density is a root setting: compact (row 44px, tick 28px, amount 16px, name 16px) or airy (row 72px, tick 56px, amount 30px, name 18px, unit 16px, pack 13px). Spacing is a loose 4/8/12/16/24 rhythm; bands add 12px above. The list reserves 150px bottom padding (100px wide) for the pinned dock.
 
-Navigation is a five-cell bottom tab bar on phones (PLAN, RECIPES, PANTRY, SHOP, INGREDIENTS). At 48em and up it becomes a side rail (48px rows) and the dock moves to the bottom of the content column (left 208px, max 640px). Below 380px tab labels drop to 10px.
+Navigation is a five-cell bottom tab bar on phones (PLAN, RECIPES, PANTRY, SHOP, INGREDIENTS). At 48em and up it becomes a side rail (48px rows) and the dock moves to the bottom of the content column (left 208px, max 640px). Below 380px tab labels tighten their tracking to 0.02em but stay at 12px.
 
 ## Elevation & Depth
 
@@ -229,13 +232,13 @@ Plan day heads are 32px caps bands. Today's gets an 8px square yellow marker and
 A small boxed label on a planned meal saying who cooks: 1px Steel border, no radius, 1px 6px padding, 13px Barlow 600 caps-tracked, truncating with ellipsis. The word "Cook" is set in secondary grey caps inside it.
 
 ### Plan meal row
-Slot name (caps, 64px column) then a stack of meal buttons: name 16px 500, then marks. A "short" mark has a 6px red square; an "expiring" mark is a 1px yellow bordered tag. A 44px square "+" add button in the accent colour closes each slot row.
+Slot name (caps, 64px column) then a stack of meal buttons: name 16px 500, then marks. A "short" mark has a 6px red square; an "expiring" mark is a 1px yellow bordered tag (a yellow fill with Ink text on light). A 44px square "+" add button in the accent colour closes each slot row.
 
 ### Inputs
 Panel fill, 1px Steel border, 8px radius. Focus swaps the border to the focus colour and adds a matching 1px outline. Error switches the border to red. Labels are caps Barlow 13px, tracked, secondary grey. Mantine's Autocomplete and NumberInput inherit this; number inputs use tabular figures.
 
 ### Navigation
-Bottom tabs: icon over 11px caps label, secondary grey; active label is yellow (dark/AMOLED) or Ink (light) with a 3px yellow underline. Side rail variant on wide screens uses a 14% yellow wash for active (full yellow fill on light).
+Bottom tabs: icon over 12px caps label, secondary grey; active label is yellow (dark/AMOLED) or Ink (light) with a 3px yellow underline. Side rail variant on wide screens uses a 14% yellow wash for active (full yellow fill on light).
 
 ### Segmented control, badge, menu, accordion, overlays
 Segmented: panel track with 1px rule, yellow indicator, Ink bold active label, 40px label height. Badge: caps Barlow 0.1em. Menu items 44px min, rule-coloured hover. Accordion hover is the rule colour. Modals, drawers, popovers and dropdowns use the panel with a 1px rule border and a Barlow heading.
@@ -244,7 +247,10 @@ Segmented: panel track with 1px rule, yellow indicator, Ink bold active label, 4
 The Pantry page opens in read mode: one flat hairline row per ingredient (name left, total figure plus unit right, count items without a unit), compact sub-lines such as "300 g · expires 29 Nov" when there are several batches or an expiry, and the expiry hint (6px square marker, caps) when a batch is expired or inside the expiring window. A 44px pencil beside the title enters edit mode: category bands per ingredient, batch rows (stepper, expiry, remove) and the help text. In edit mode the pinned panel (same position and shadow as the dock: bottom 68px on phones, content column bottom at 48em and up) is always shown: primary "Save changes" (disabled until something changes) and default "Discard" ("Cancel" while unchanged). Saving or leaving returns to read mode.
 
 ### Offline badge
-Header pill, 12px caps Barlow 0.1em, accent text, 1px yellow outline, shown while ticks are queued.
+Header pill, 12px caps Barlow 0.1em, accent text, 1px yellow outline, shown while ticks are queued. On light it is a yellow fill with Ink text and no outline (Cue Chip Rule).
+
+### Plan week navigator
+Header row above the plan: Previous and Next are 44px icon buttons (chevrons, labelled for screen readers), "This week" and "Slots" are 44px text buttons. The date range carries a relative label beside it in 13px caps secondary grey: "This week", "Next week", "Last week", "In 2 weeks", "3 weeks ago".
 
 ## Do's and Don'ts
 
