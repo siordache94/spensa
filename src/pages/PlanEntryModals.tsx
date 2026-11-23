@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Alert, Button, Input, Loader, Modal, Radio, SegmentedControl, Select, Stack, TagsInput, Text } from '@mantine/core'
+import { Alert, Button, Input, Loader, Radio, SegmentedControl, Select, Stack, TagsInput, Text } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -44,6 +45,7 @@ export function MealModal({
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [recipeId, setRecipeId] = useState<string | null>(null)
   const [portions, setPortions] = useState<number | null>(meal?.portions ?? 2)
+  const dirty = useDirty({ recipeId, portions })
   const write = useWrite(onClose)
 
   const recipes = useQuery({
@@ -68,7 +70,7 @@ export function MealModal({
   }
 
   return (
-    <Modal opened onClose={onClose} title={meal ? 'Change portions' : `Add to ${target.slot}, ${target.date}`} fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title={meal ? 'Change portions' : `Add to ${target.slot}, ${target.date}`} fullScreen={isMobile}>
       <Stack>
         {recipes.error && <Alert color="red">{recipes.error.message}</Alert>}
         {!meal &&
@@ -98,7 +100,7 @@ export function MealModal({
         />
         <Button disabled={!canSave} loading={write.isPending} onClick={save}>Save</Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }
 
@@ -119,6 +121,7 @@ export function MoveCopyModal({
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [date, setDate] = useState<string | null>(meal.date)
   const [slot, setSlot] = useState<string | null>(meal.slot)
+  const dirty = useDirty({ date, slot })
   const write = useWrite(onClose)
 
   const save = () => {
@@ -132,7 +135,7 @@ export function MoveCopyModal({
   }
 
   return (
-    <Modal opened onClose={onClose} title={mode === 'move' ? 'Move to…' : 'Copy to…'} fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title={mode === 'move' ? 'Move to…' : 'Copy to…'} fullScreen={isMobile}>
       <Stack>
         <DatePickerInput label="Date" firstDayOfWeek={1} value={date} onChange={setDate} />
         <Input.Wrapper label="Slot">
@@ -142,7 +145,7 @@ export function MoveCopyModal({
           {mode === 'move' ? 'Move' : 'Copy'}
         </Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }
 
@@ -150,6 +153,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
   const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [value, setValue] = useState(slots)
+  const dirty = useDirty(value)
   const write = useWrite(() => {
     queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
     onClose()
@@ -157,7 +161,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
   const clean = [...new Set(value.map((s) => s.trim()).filter(Boolean))]
 
   return (
-    <Modal opened onClose={onClose} title="Slots" fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title="Slots" fullScreen={isMobile}>
       <Stack>
         <TagsInput label="Slots, in day order" value={value} onChange={setValue} />
         {clean.length === 0 && <Text size="sm" c="red">Keep at least one slot.</Text>}
@@ -170,7 +174,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
           Save
         </Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }
 
@@ -179,9 +183,10 @@ export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: stri
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const members = useMembers()
   const [cook, setCook] = useState(meal.cook_id ?? '')
+  const dirty = useDirty(cook)
   const write = useWrite(onClose)
   return (
-    <Modal opened onClose={onClose} title="Who cooks?" fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title="Who cooks?" fullScreen={isMobile}>
       <Stack>
         {members.error && <Alert color="red">{members.error.message}</Alert>}
         {members.isPending ? (
@@ -201,6 +206,6 @@ export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: stri
           Save
         </Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }

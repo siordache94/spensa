@@ -5,6 +5,7 @@ import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
@@ -45,6 +46,7 @@ const dayName = (d: Day) => dayjs(d).format('ddd D')
 function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean; onBuy: (b: Buy) => void; onClose: () => void }) {
   const [qty, setQty] = useState<number | string>(buy.qty)
   const [expires, setExpires] = useState<DateValue>(buy.expiresOn ? dayjs(buy.expiresOn).toDate() : null)
+  const dirty = useDirty({ qty, expires })
   const qtyValue = qty === '' ? null : Number(qty)
   const qtyValid = qtyValue !== null && qtyValue > 0
 
@@ -54,7 +56,7 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
   }
 
   return (
-    <Modal opened onClose={onClose} title={buy.name}>
+    <GuardedModal dirty={dirty} onClose={onClose} title={buy.name}>
       <Stack>
         <NumberInput
           label="Amount"
@@ -79,7 +81,7 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
           Buy
         </Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }
 

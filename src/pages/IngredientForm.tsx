@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Input, Modal, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Autocomplete, Button, Input, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -37,6 +38,8 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const [shelf, setShelf] = useState<number | null>(ingredient?.shelf_life_days ?? null)
   const [min, setMin] = useState<number | null>(ingredient?.min_stock ?? null)
   const [confirming, setConfirming] = useState(false)
+
+  const dirty = useDirty({ name, unit, category, pack, shelf, min })
 
   const usage = useQuery({
     queryKey: ['ingredient-usage', ingredient?.id],
@@ -108,8 +111,8 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const failure = save.error?.message ?? remove.error?.message ?? usage.error?.message
 
   return (
-    <Modal
-      opened
+    <GuardedModal
+      dirty={dirty}
       onClose={onClose}
       title={ingredient ? 'Edit ingredient' : 'Add ingredient'}
       fullScreen={isMobile}
@@ -175,6 +178,6 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
           </Stack>
         </Stack>
       </form>
-    </Modal>
+    </GuardedModal>
   )
 }

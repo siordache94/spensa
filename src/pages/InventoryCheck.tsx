@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ActionIcon, Alert, Button, Modal, Select, Text } from '@mantine/core'
+import { ActionIcon, Alert, Button, Select, Text } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { IconPlus, IconX } from '@tabler/icons-react'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
@@ -57,6 +58,8 @@ export default function InventoryCheck({ groups, today, onClose }: Props) {
   // Ingredients shown as bands: those in stock, then any added here, in the order they appeared.
   const [shown, setShown] = useState<string[]>(() => groups.map((g) => g.ingredient.id))
 
+  const dirty = useDirty({ lines: lines.map((l) => [l.key, l.qty, l.expiry]), shown })
+
   const byId = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients])
   const addable = useMemo(
     () =>
@@ -98,8 +101,8 @@ export default function InventoryCheck({ groups, today, onClose }: Props) {
   })
 
   return (
-    <Modal
-      opened onClose={onClose} title="Inventory check" fullScreen={isMobile} size="lg" padding={0}
+    <GuardedModal
+      dirty={dirty} onClose={onClose} title="Inventory check" fullScreen={isMobile} size="lg" padding={0}
       styles={{ title: { fontWeight: 700 }, header: { padding: '12px 16px' } }}
     >
       <div className="sp-inv-body">
@@ -194,6 +197,6 @@ export default function InventoryCheck({ groups, today, onClose }: Props) {
           </Button>
         </div>
       </div>
-    </Modal>
+    </GuardedModal>
   )
 }

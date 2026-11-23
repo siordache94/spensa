@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Button, Center, CloseButton, Group, Input, Loader, Modal, SegmentedControl, Select, Stack, TagsInput, Text, Textarea, TextInput } from '@mantine/core'
+import { Alert, Button, Center, CloseButton, Group, Input, Loader, SegmentedControl, Select, Stack, TagsInput, Text, Textarea, TextInput } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -62,6 +63,8 @@ export default function RecipeForm({ recipe, onClose }: Props) {
         }))
       : [],
   )
+
+  const dirty = useDirty({ name, tags, serves, instructions, lines: lines.map((l) => [l.ingredientId, l.amount]) })
 
   const ingredientsQuery = useQuery({ queryKey: ['ingredients'], queryFn: fetchIngredients })
   const ingredients = ingredientsQuery.data ?? []
@@ -125,7 +128,7 @@ export default function RecipeForm({ recipe, onClose }: Props) {
   const failure = save.error?.message ?? createIngredient.error?.message ?? ingredientsQuery.error?.message
 
   return (
-    <Modal opened onClose={onClose} title={recipe ? 'Edit recipe' : 'Add recipe'} fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title={recipe ? 'Edit recipe' : 'Add recipe'} fullScreen={isMobile}>
       <form onSubmit={submit}>
         <Stack>
           {failure && <Alert color="red">{failure}</Alert>}
@@ -244,6 +247,6 @@ export default function RecipeForm({ recipe, onClose }: Props) {
           <Button type="submit" disabled={!canSave} loading={save.isPending}>Save</Button>
         </Stack>
       </form>
-    </Modal>
+    </GuardedModal>
   )
 }

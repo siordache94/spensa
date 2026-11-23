@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Alert, Button, Modal, Select, Stack } from '@mantine/core'
+import { Alert, Button, Select, Stack } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
+import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -28,6 +29,7 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
   const [qty, setQty] = useState<number | null>(null)
   const [expiry, setExpiry] = useState<string | null>(null)
 
+  const dirty = useDirty({ ingredientId, qty, expiry })
   const selected = ingredients.find((i) => i.id === ingredientId)
   const qtyValue = num(qty)
 
@@ -58,7 +60,7 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
   }
 
   return (
-    <Modal opened onClose={onClose} title="Add to pantry" fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title="Add to pantry" fullScreen={isMobile}>
       <Stack>
         {add.error && <Alert color="red">{add.error.message}</Alert>}
 
@@ -92,6 +94,6 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
           Add
         </Button>
       </Stack>
-    </Modal>
+    </GuardedModal>
   )
 }
