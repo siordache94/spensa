@@ -2,10 +2,9 @@ import { useState } from 'react'
 import { Alert, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { IconBell } from '@tabler/icons-react'
-import { useCommand } from '../lib/api/command.ts'
 import { useMyId } from '../lib/api/auth.ts'
 import { memberLabel, useMembers } from '../lib/api/household.ts'
-import { enableNotifications, useDeviceSubscribed } from '../lib/api/push.ts'
+import { useDeviceSubscribed, useTurnOnNotifications } from '../lib/api/push.ts'
 import { dismissPrompt, promptDismissed, pushConfigured, useInstallApp, usePushStatus, type Prompt } from '../lib/push.ts'
 
 /** The iOS Share button, drawn inline so the instruction can point at the real thing. */
@@ -37,7 +36,7 @@ export default function NotifyPrompt() {
   const me = useMyId()
   const [notifyHidden, hideNotify] = useDismiss('notify')
   const [installHidden, hideInstall] = useDismiss('install')
-  const turnOn = useCommand(enableNotifications, {
+  const turnOn = useTurnOnNotifications({
     onSuccess: () => notifications.show({ message: 'Notifications are on. You can change them in Settings.' }),
     onError: (e) => notifications.show({ color: 'red', title: 'Could not turn on notifications', message: e.message }),
   })
@@ -67,7 +66,7 @@ export default function NotifyPrompt() {
         <Group gap="xs" justify="flex-end">
           {install && <Button variant="subtle" size="sm" onClick={() => void install()}>Install app</Button>}
           <Button variant="default" size="sm" onClick={hideNotify}>Not now</Button>
-          <Button size="sm" loading={turnOn.isPending} onClick={() => turnOn.mutate()}>Turn on</Button>
+          <Button size="sm" loading={turnOn.isPending} onClick={turnOn.turnOn}>Turn on</Button>
         </Group>
       </Stack>
     </Paper>

@@ -3,7 +3,7 @@ import { Button, Group, Stack, Switch, Text, Title } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useCommand } from '../lib/api/command.ts'
-import { disableNotifications, enableNotifications, savePushPrefs, sendTestNotification, useDeviceSubscribed, usePushPrefs } from '../lib/api/push.ts'
+import { disableNotifications, savePushPrefs, sendTestNotification, useDeviceSubscribed, usePushPrefs, useTurnOnNotifications } from '../lib/api/push.ts'
 import { pushConfigured, useInstallApp, usePushStatus } from '../lib/push.ts'
 import { isTime } from '../lib/pushState.ts'
 import { ShareIcon } from './NotifyPrompt.tsx'
@@ -17,7 +17,7 @@ export default function NotificationSettings() {
   const prefs = usePushPrefs()
   const save = useCommand(savePushPrefs, { onError: fail('Could not save') })
   const install = useInstallApp()
-  const turnOn = useCommand(enableNotifications, { onError: fail('Could not turn on notifications') })
+  const turnOn = useTurnOnNotifications({ onError: fail('Could not turn on notifications') })
   const turnOff = useCommand(disableNotifications, {
     onSuccess: () => notifications.show({ message: 'Notifications are off on this device.' }),
     onError: fail('Could not turn off notifications'),
@@ -50,7 +50,7 @@ export default function NotificationSettings() {
           <Text size="sm">{on ? 'This device gets notifications.' : 'This device does not get notifications.'}</Text>
           {on
             ? <Button variant="default" size="sm" loading={turnOff.isPending} onClick={() => turnOff.mutate()}>Turn off</Button>
-            : <Button size="sm" loading={turnOn.isPending} disabled={subscribed.isPending} onClick={() => turnOn.mutate()}>Turn on</Button>}
+            : <Button size="sm" loading={turnOn.isPending} disabled={subscribed.isPending} onClick={turnOn.turnOn}>Turn on</Button>}
         </Group>
       )}
       {install && <Button variant="default" size="sm" onClick={() => void install()}>Install app</Button>}

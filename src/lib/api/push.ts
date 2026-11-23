@@ -1,13 +1,13 @@
 // Push aggregate: this device's subscription, the person's notification prefs, the test push, and the install prompt's
 // data. The browser side (permission, the service worker, the subscription object) is in src/lib/push.ts.
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { defineCommand } from './command.ts'
+import { defineCommand, useCommand } from './command.ts'
 import { useApi } from './context.tsx'
 import { useMyId } from './auth.ts'
 import { keys } from './keys.ts'
 import type { PushPrefsRow } from './port.ts'
-import { currentSubscriptionFields, hasDeviceSubscription, pushConfigured, pushEnv, requestPushSubscription, unsubscribeDevice, usePushStatus } from '../push.ts'
+import { askNotificationPermission, currentSubscriptionFields, hasDeviceSubscription, permissionRefusal, pushConfigured, pushEnv, subscribeDevice, unsubscribeDevice, usePushStatus } from '../push.ts'
 import { isTime, pushStatus } from '../pushState.ts'
 
 export type Prefs = PushPrefsRow // expiry_time 'HH:MM', null = Off
@@ -53,16 +53,42 @@ export function useResyncSubscription() {
 }
 
 // ---- Commands --------------------------------------------------------------------------------------------------
-/** Ask permission, subscribe this device and store it, then the defaults (list changes on, reminder at 09:00). Call it from a tap. */
+/**
+ * Subscribe this device and store it, then the defaults (list changes on, reminder at 09:00). Permission must already be
+ * granted: use useTurnOnNotifications, which asks in the tap.
+ */
 export const enableNotifications = defineCommand<void>({
   name: 'push.enable',
   run: async (api) => {
-    const s = await requestPushSubscription()
+    const s = await subscribeDevice()
     await api.push.saveSubscription(s.endpoint, s.p256dh, s.auth)
     await api.push.ensurePrefs(DEFAULT_PREFS)
   },
   invalidates: () => [keys.push.all()],
 })
+
+/**
+ * The "Turn on" tap. Asks for permission synchronously inside the tap (iOS rejects a request that comes after an await,
+ * for example a paused mutation when offline). Only if granted does it run enableNotifications.
+ */
+export function useTurnOnNotifications(options: { onSuccess?: () => void; onError?: (e: Error) => void } = {}) {
+  const [asking, setAsking] = useState(false)
+  const mutation = useCommand(enableNotifications, options)
+  const turnOn = () => {
+    setAsking(true)
+    // First statement of the handler: no await before the permission request.
+    askNotificationPermission().then(
+      (permission) => {
+        setAsking(false)
+        const refusal = permissionRefusal(permission)
+        if (refusal) options.onError?.(refusal)
+        else mutation.mutate()
+      },
+      (e: Error) => { setAsking(false); options.onError?.(e) },
+    )
+  }
+  return { turnOn, isPending: asking || mutation.isPending }
+}
 
 /** Unsubscribes this device and removes its stored subscription. */
 export const disableNotifications = defineCommand<void>({

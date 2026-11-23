@@ -15,6 +15,7 @@ import { useSettings } from './lib/settings.ts'
 import { ApiProvider } from './lib/api/context.tsx'
 import { supabaseAdapter } from './lib/api/supabaseAdapter.ts'
 import { registerShopMutations } from './lib/shopMutations.ts'
+import { shouldPersistQuery } from './lib/api/keys.ts'
 import { readRaw, removeKey, writeRaw } from './lib/storage.ts'
 
 const maxAge = 1000 * 60 * 60 * 24 * 7
@@ -36,7 +37,12 @@ function Root() {
       <Notifications />
       <PersistQueryClientProvider
         client={queryClient}
-        persistOptions={{ persister, maxAge }}
+        persistOptions={{
+          persister,
+          maxAge,
+          // Same default as TanStack (successful queries only), plus the exclusions in shouldPersistQuery.
+          dehydrateOptions: { shouldDehydrateQuery: (q) => q.state.status === 'success' && shouldPersistQuery(q) },
+        }}
         onSuccess={() => { void queryClient.resumePausedMutations() }}
       >
         <ApiProvider api={supabaseAdapter}>

@@ -66,16 +66,27 @@ function fieldsOf(sub: PushSubscription): SubscriptionFields {
   return { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }
 }
 
+/** The message for a permission answer that does not allow notifications, or null when it does. */
+export function permissionRefusal(permission: NotificationPermission): Error | null {
+  if (permission === 'granted') return null
+  return new Error(permission === 'denied' ? 'Notifications are blocked. Allow them for Spensa in your browser or phone settings.' : 'Permission was not given.')
+}
+
 /**
- * Asks permission and subscribes this device (reusing the subscription when the keys match). Call it straight from a
- * tap (iOS requires that). The caller stores the result.
+ * Asks the browser for notification permission. Call it synchronously as the first thing in a tap handler (iOS only
+ * honours the request inside the tap), so nothing may be awaited before this call. `request` is a parameter only so
+ * tests can stub it.
  */
-export async function requestPushSubscription(): Promise<SubscriptionFields> {
+export async function askNotificationPermission(request: () => Promise<NotificationPermission> = () => Notification.requestPermission()): Promise<NotificationPermission> {
+  return request() // no await before this line: an async function runs synchronously up to its first await
+}
+
+/**
+ * Subscribes this device (reusing the subscription when the keys match) and returns the fields the server stores.
+ * Permission must already be granted (see askNotificationPermission).
+ */
+export async function subscribeDevice(): Promise<SubscriptionFields> {
   if (!VAPID_KEY) throw new Error('Notifications are not set up for this app.')
-  const permission = await Notification.requestPermission() // first await: still inside the tap
-  if (permission !== 'granted') {
-    throw new Error(permission === 'denied' ? 'Notifications are blocked. Allow them for Spensa in your browser or phone settings.' : 'Permission was not given.')
-  }
   const reg = await registration()
   const bytes = keyToBytes(VAPID_KEY)
   let sub = await reg.pushManager.getSubscription()
