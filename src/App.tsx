@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text } from '@mantine/core'
 import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconChevronDown, IconFridge, IconSettings, IconShoppingCart } from '@tabler/icons-react'
 import { Link, NavLink, Route, Routes } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Session } from '@supabase/supabase-js'
+import { isAuthApiError, type Session } from '@supabase/supabase-js'
 import { QRCodeSVG } from 'qrcode.react'
 import { notifications } from '@mantine/notifications'
 import { supabase } from './lib/supabase.ts'
@@ -171,15 +171,48 @@ function SignedIn() {
   return <Shell household={household} />
 }
 
+const INVALID_USER_CODES = ['user_not_found', 'session_not_found', 'bad_jwt']
+
+// 'invalid' only when the server itself says the user/session is gone.
+// Anything else (network down, offline, unknown error) is 'unreachable'.
+async function verifyUser(): Promise<'ok' | 'invalid' | 'unreachable'> {
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (!error && data.user) return 'ok'
+    const serverSaysGone = isAuthApiError(error) &&
+      ([401, 403, 404].includes(error.status) || INVALID_USER_CODES.includes(error.code ?? ''))
+    return serverSaysGone && navigator.onLine !== false ? 'invalid' : 'unreachable'
+  } catch {
+    return 'unreachable'
+  }
+}
+
 function App() {
   // undefined = session not yet known
   const [session, setSession] = useState<Session | null | undefined>(undefined)
+  const userChecked = useRef(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
     return () => data.subscription.unsubscribe()
   }, [])
+
+  // A local DB reset leaves a JWT for a user that no longer exists. Verify once per load
+  // in the background; only a server-side "this user/session is gone" answer signs out.
+  // Network failures never sign out: retry once when the browser comes back online.
+  useEffect(() => {
+    if (!session || userChecked.current) return
+    userChecked.current = true
+    verifyUser().then((result) => {
+      if (result === 'invalid') return supabase.auth.signOut()
+      if (result === 'unreachable') {
+        window.addEventListener('online', () => {
+          verifyUser().then((r) => { if (r === 'invalid') supabase.auth.signOut() })
+        }, { once: true })
+      }
+    })
+  }, [session])
 
   if (session === undefined) return <Center h="100vh"><Loader /></Center>
   if (!session) return <AuthPage />
