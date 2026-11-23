@@ -27,6 +27,8 @@
 .sp-mark { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.25; color: var(--sp-text); }
 .sp-short::before { content: ''; width: 6px; height: 6px; background: var(--sp-red); flex: none; }
 .sp-exp { border: 1px solid var(--sp-yellow); padding: 1px 6px; }
+/* a yellow hairline on white is ~1.5:1, so light uses the fill like the today band */
+:root[data-spensa-theme='light'] .sp-exp { background: var(--sp-yellow); border-color: var(--sp-yellow); color: var(--sp-ink); }
 .sp-addmeal {
   width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; cursor: pointer;
   color: var(--sp-accent); font: 600 24px/1 var(--sp-label);
