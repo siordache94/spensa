@@ -1,118 +1,212 @@
-import { useMemo, useState } from 'react'
-import { Accordion, Alert, Badge, Button, Center, Group, Loader, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
+import { useEffect, useMemo, useState } from 'react'
+import { ActionIcon, Alert, Button, Center, Group, Loader, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
+import { DatePickerInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
+import { IconPlus, IconX } from '@tabler/icons-react'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
-import type { Tables, TablesInsert } from '../lib/database.types.ts'
-import { addDays, replay, stockByIngredient, type Batch, type Day } from '../domain/replay.ts'
+import type { Tables } from '../lib/database.types.ts'
+import { addDays, replay, stockByIngredient, type Day } from '../domain/replay.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import UseSoon from './UseSoon.tsx'
-import AddBatch from './AddBatch.tsx'
-import InventoryCheck from './InventoryCheck.tsx'
+import './pantry.css'
 
 type Ingredient = Tables<'ingredients'>
-type Row = { batch: Batch; amount: number }
+
+// One batch line. batchId null = a batch created by this check. `undo` holds the amount a removed row had.
+type Line = {
+  key: string
+  batchId: string | null
+  ingredientId: string
+  qty: number | null
+  expiry: Day | null
+  undo?: number
+}
+type Draft = { lines: Line[]; shown: string[] }
 
 const EPS = 1e-9
-const round1 = (n: number) => Math.round(n * 10) / 10
-const fmt = (day: Day) => dayjs(day).format('D MMM YYYY')
-// Stepper gives null when empty; anything else is a number (NaN while typing "-").
-const num = (v: number | null) => (v === null ? NaN : v)
+const round3 = (n: number) => Number(n.toFixed(3))
+const total = (lines: Line[]) => round3(lines.reduce((s, l) => s + (l.qty && l.qty > 0 ? l.qty : 0), 0))
+const valid = (l: Line) => l.qty !== null && Number.isFinite(l.qty) && l.qty >= 0
+let nextKey = 0
 
-const byExpiry = (a: Row, b: Row) =>
-  (a.batch.expiresOn ?? '9999').localeCompare(b.batch.expiresOn ?? '9999') ||
-  Date.parse(a.batch.addedAt) - Date.parse(b.batch.addedAt)
-
-function expiryBadge(expiresOn: Day, today: Day, expiringDays: number) {
-  if (expiresOn < today) return { color: 'red', text: `Expired ${fmt(expiresOn)}` }
-  const soon = expiresOn <= addDays(today, expiringDays)
-  return { color: soon ? 'yellow' : 'gray', text: `Expires ${fmt(expiresOn)}` }
+function hint(expiry: Day, today: Day, expiringDays: number) {
+  const days = Math.round((Date.parse(expiry) - Date.parse(today)) / 86400000)
+  if (days < 0) return { expired: true, text: 'Expired' }
+  if (expiry > addDays(today, expiringDays)) return null
+  return { expired: false, text: days === 0 ? 'Expires today' : `Expires in ${days} day${days === 1 ? '' : 's'}` }
 }
 
 export default function PantryPage() {
+  const queryClient = useQueryClient()
   const { events, ingredients, household, today: day, isPending, error } = usePantry()
   const [search, setSearch] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [checking, setChecking] = useState(false)
+  // null = untouched: show the server state. Once edited, the draft wins and refetches are ignored.
+  const [draft, setDraft] = useState<Draft | null>(null)
 
   // Stock is replayed, never stored (src/domain/replay.ts).
-  const live = useMemo(() => {
+  const base = useMemo<Draft | null>(() => {
     if (!events || !day) return null
     const { remaining } = replay(events, day)
     const stock = stockByIngredient(events, remaining)
-    const byIngredient = new Map<string, Row[]>()
-    for (const batch of events.batches) {
-      const amount = remaining.get(batch.id) ?? 0
-      if (amount <= EPS) continue
-      const rows = byIngredient.get(batch.ingredientId) ?? []
-      rows.push({ batch, amount })
-      byIngredient.set(batch.ingredientId, rows)
+    const lines: Line[] = []
+    const shown: string[] = []
+    for (const i of [...(ingredients ?? [])].sort((a, b) => a.name.localeCompare(b.name))) {
+      if (i.unit === 'to_taste' || (stock.get(i.id) ?? 0) <= 0) continue
+      shown.push(i.id)
+      events.batches
+        .filter((b) => b.ingredientId === i.id && (remaining.get(b.id) ?? 0) > EPS)
+        .sort((a, b) => (a.expiresOn ?? '9999').localeCompare(b.expiresOn ?? '9999') || Date.parse(a.addedAt) - Date.parse(b.addedAt))
+        .forEach((b) => lines.push({ key: b.id, batchId: b.id, ingredientId: i.id, qty: round3(remaining.get(b.id) ?? 0), expiry: b.expiresOn }))
     }
-    for (const rows of byIngredient.values()) rows.sort(byExpiry)
-    return { stock, byIngredient }
-  }, [events, day])
+    return { lines, shown }
+  }, [events, ingredients, day])
 
-  const byName = (a: Ingredient, b: Ingredient) => a.name.localeCompare(b.name)
-  const stocked = useMemo(
-    () => (ingredients ?? []).filter((i) => i.unit !== 'to_taste' && (live?.stock.get(i.id) ?? 0) > 0).sort(byName),
-    [ingredients, live],
-  )
-  const toTaste = useMemo(() => (ingredients ?? []).filter((i) => i.unit === 'to_taste').sort(byName), [ingredients])
-  const nonToTaste = useMemo(() => (ingredients ?? []).filter((i) => i.unit !== 'to_taste').sort(byName), [ingredients])
+  const view = draft ?? base
+  const dirty = draft !== null
+  const edit = (fn: (d: Draft) => Draft) => setDraft((d) => fn(d ?? base!))
+  const patch = (key: string, p: Partial<Line>) => edit((d) => ({ ...d, lines: d.lines.map((l) => (l.key === key ? { ...l, ...p } : l)) }))
+  const addLine = (i: Ingredient) =>
+    edit((d) => ({
+      shown: d.shown.includes(i.id) ? d.shown : [...d.shown, i.id],
+      lines: [...d.lines, { key: `new-${nextKey++}`, batchId: null, ingredientId: i.id, qty: i.pack_size ? Number(i.pack_size) : 1, expiry: null }],
+    }))
+  const remove = (l: Line) =>
+    l.batchId === null ? edit((d) => ({ ...d, lines: d.lines.filter((x) => x.key !== l.key) })) : patch(l.key, { qty: 0, undo: l.qty ?? 0 })
+
+  const save = useMutation({
+    mutationFn: async () => {
+      // A snapshot zeroes any batch it omits, so keep batches the partner added while this draft was open.
+      const known = new Set(view!.lines.map((l) => l.batchId))
+      const added = base?.lines.filter((l) => l.batchId && !known.has(l.batchId)) ?? []
+      const items = [...view!.lines, ...added].map((l) => ({ batch_id: l.batchId, ingredient_id: l.ingredientId, qty: l.qty as number, expires_on: l.expiry }))
+      const { error } = await supabase.rpc('save_inventory_check', { on_date: day!, items })
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: async () => {
+      await invalidatePantry(queryClient)
+      setDraft(null)
+    },
+  })
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const byId = useMemo(() => new Map((ingredients ?? []).map((i) => [i.id, i])), [ingredients])
+  const toTaste = useMemo(() => (ingredients ?? []).filter((i) => i.unit === 'to_taste').sort((a, b) => a.name.localeCompare(b.name)), [ingredients])
 
   if (error) return <Alert color="red">{error.message}</Alert>
-  if (isPending || !live || !day || !household || !ingredients) return <Center py="xl"><Loader /></Center>
+  if (isPending || !view || !day || !household || !ingredients) return <Center py="xl"><Loader /></Center>
 
   const needle = search.trim().toLowerCase()
-  const shown = stocked.filter((i) => i.name.toLowerCase().includes(needle))
-  const groups = stocked.map((i) => ({ ingredient: i, rows: live.byIngredient.get(i.id) ?? [] }))
+  const addable = ingredients
+    .filter((i) => i.unit !== 'to_taste' && !view.shown.includes(i.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((i) => ({ value: i.id, label: i.name }))
+  const visible = view.shown.filter((id) => byId.get(id)?.name.toLowerCase().includes(needle))
 
   return (
     <Stack>
-      <Group justify="space-between" wrap="wrap" gap="xs">
-        <Title order={2}>Pantry</Title>
-        <Group gap="xs" wrap="nowrap">
-          <Button variant="light" onClick={() => setChecking(true)}>Inventory check</Button>
-          <Button onClick={() => setAdding(true)}>Add to pantry</Button>
-        </Group>
-      </Group>
+      <Title order={2}>Pantry</Title>
 
       <UseSoon />
 
       <TextInput placeholder="Search" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
 
-      {stocked.length === 0 ? (
-        <Text c="dimmed">Nothing in the pantry yet. Use Add to pantry to record what you bought.</Text>
-      ) : shown.length === 0 ? (
-        <Text c="dimmed">No matches.</Text>
-      ) : (
-        <Accordion>
-          {shown.map((i) => {
-            const rows = live.byIngredient.get(i.id) ?? []
-            const soonest = rows[0]?.batch.expiresOn
-            const badge = soonest ? expiryBadge(soonest, day, household.expiring_days) : null
-            return (
-              <Accordion.Item key={i.id} value={i.id}>
-                <Accordion.Control>
-                  <Group justify="space-between" wrap="nowrap" gap="xs">
-                    <Text fw={500} truncate="end" miw={0}>{i.name}</Text>
-                    <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-                      <Text size="sm" c="dimmed">{round1(live.stock.get(i.id) ?? 0)} {i.unit}</Text>
-                      {badge && <Badge color={badge.color} variant="light">{badge.text}</Badge>}
-                    </Group>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <IngredientDetail ingredient={i} rows={rows} />
-                </Accordion.Panel>
-              </Accordion.Item>
-            )
-          })}
-        </Accordion>
-      )}
+      <div className="sp-inv-body" data-dirty={dirty ? '' : undefined}>
+        <Text size="sm" c="dimmed" className="sp-inv-help">
+          Amounts already account for today's planned meals. Correct what's off; 0 means gone.
+        </Text>
+        {save.error && <Alert color="red" mx="md" mb="xs">{save.error.message}</Alert>}
+        {view.shown.length === 0 && <Text px="md" c="dimmed">Nothing in the pantry yet. Add an item below.</Text>}
+        {view.shown.length > 0 && visible.length === 0 && <Text px="md" c="dimmed">No matches.</Text>}
+
+        {visible.map((id) => {
+          const ing = byId.get(id)!
+          const mine = view.lines.filter((l) => l.ingredientId === id)
+          const unit = ing.unit === 'count' ? '' : ing.unit
+          return (
+            <section key={id} aria-label={ing.name}>
+              <div className="sp-inv-band">
+                <span className="sp-inv-name">{ing.name}</span>
+                {mine.length > 1 && <span className="sp-inv-total">{total(mine)}{unit && ` ${unit}`}</span>}
+              </div>
+              {mine.map((l) => {
+                const gone = l.batchId !== null && l.qty === 0
+                const h = !gone && l.expiry ? hint(l.expiry, day, household.expiring_days) : null
+                return (
+                  <div key={l.key} className="sp-inv-row" data-removed={gone ? '' : undefined}>
+                    {gone ? (
+                      <>
+                        <span className="sp-inv-gone">Removed</span>
+                        <Button variant="subtle" size="compact-md" miw={44} mih={44} onClick={() => patch(l.key, { qty: l.undo || 1, undo: undefined })}>
+                          Undo
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Stepper
+                          value={l.qty}
+                          onChange={(v) => patch(l.key, { qty: v })}
+                          min={0}
+                          step={amountStep(ing.unit, l.qty)}
+                          allowDecimal={ing.unit !== 'count'}
+                          unit={unit || undefined}
+                          aria-label={`${ing.name} amount`}
+                          error={valid(l) ? undefined : ' '}
+                        />
+                        <DatePickerInput
+                          className="sp-inv-date"
+                          styles={{ input: { height: 44, minHeight: 44 } }}
+                          aria-label={`${ing.name} expiry`}
+                          placeholder="No expiry"
+                          valueFormat="D MMM"
+                          firstDayOfWeek={1}
+                          clearable
+                          popoverProps={{ withinPortal: true }}
+                          value={l.expiry}
+                          onChange={(v) => patch(l.key, { expiry: v })}
+                        />
+                        <ActionIcon variant="subtle" color="gray" size={44} aria-label={`Remove ${ing.name} batch`} onClick={() => remove(l)}>
+                          <IconX size={20} />
+                        </ActionIcon>
+                        {h && <span className="sp-inv-hint" data-expired={h.expired ? '' : undefined}>{h.text}</span>}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+              <div className="sp-inv-more">
+                <Button variant="subtle" size="compact-md" mih={40} leftSection={<IconPlus size={16} />} onClick={() => addLine(ing)}>
+                  Add another
+                </Button>
+              </div>
+            </section>
+          )
+        })}
+
+        <div className="sp-inv-add">
+          <Select
+            label="Add item"
+            placeholder="Search ingredients"
+            searchable
+            data={addable}
+            value={null}
+            nothingFoundMessage="No other ingredients"
+            comboboxProps={{ position: 'bottom', middlewares: { flip: false, shift: false } }}
+            onChange={(v) => {
+              const i = v ? byId.get(v) : undefined
+              if (i) addLine(i)
+            }}
+          />
+        </div>
+      </div>
 
       {toTaste.length > 0 && (
         <Stack gap={0}>
@@ -121,99 +215,12 @@ export default function PantryPage() {
         </Stack>
       )}
 
-      {adding && <AddBatch ingredients={nonToTaste} today={day} onClose={() => setAdding(false)} />}
-      {checking && <InventoryCheck groups={groups} today={day} onClose={() => setChecking(false)} />}
-    </Stack>
-  )
-}
-
-function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: Row[] }) {
-  const queryClient = useQueryClient()
-  const [used, setUsed] = useState<number | null>(null)
-  const [remaining, setRemaining] = useState<number | null>(null)
-  const [discarding, setDiscarding] = useState<string | null>(null)
-  const soonestId = rows[0]?.batch.id // rows are sorted soonest-expiring first
-
-  const record = useMutation({
-    mutationFn: async (row: TablesInsert<'adjustments'>) => {
-      const { error } = await supabase.from('adjustments').insert(row)
-      if (error) throw new Error(error.message)
-    },
-    onError: (e) => notifications.show({ color: 'red', message: e.message }),
-    onSettled: () => invalidatePantry(queryClient),
-  })
-
-  const base = { ingredient_id: ingredient.id }
-
-  return (
-    <Stack gap="md">
-      <Stack gap="xs">
-        {rows.map(({ batch, amount }) => (
-          <Group key={batch.id} justify="space-between" wrap="nowrap" align="flex-start" gap="xs">
-            <div>
-              <Text size="sm" fw={500}>{round1(amount)} {ingredient.unit}</Text>
-              <Text size="xs" c="dimmed">
-                added {fmt(batch.addedOn)} · {batch.expiresOn ? `expires ${fmt(batch.expiresOn)}` : 'no expiry'}
-              </Text>
-            </div>
-            {discarding === batch.id ? (
-              <Group gap="xs" wrap="nowrap">
-                <Button
-                  size="compact-sm"
-                  color="red"
-                  disabled={record.isPending}
-                  onClick={() => record.mutate({ ...base, kind: 'discard', batch_id: batch.id }, { onSuccess: () => setDiscarding(null) })}
-                >
-                  Confirm
-                </Button>
-                <Button size="compact-sm" variant="default" onClick={() => setDiscarding(null)}>Keep</Button>
-              </Group>
-            ) : (
-              <Button size="compact-sm" variant="light" color="red" onClick={() => setDiscarding(batch.id)}>
-                Discard
-              </Button>
-            )}
-          </Group>
-        ))}
-      </Stack>
-
-      <Group align="flex-end" wrap="nowrap">
-        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Used…" min={amountStep(ingredient.unit, 0)} step={amountStep(ingredient.unit, used)} unit={ingredient.unit} value={used} onChange={setUsed} /></div>
-        <Button
-          variant="light"
-          h={44}
-          disabled={!(num(used) > 0) || record.isPending}
-          onClick={() => record.mutate({ ...base, kind: 'used', qty: num(used), batch_id: null }, { onSuccess: () => setUsed(null) })}
-        >
-          Apply
-        </Button>
-      </Group>
-
-      <Group align="flex-end" wrap="nowrap">
-        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Set remaining…" min={0} step={amountStep(ingredient.unit, remaining)} unit={ingredient.unit} value={remaining} onChange={setRemaining} /></div>
-        <Button
-          variant="light"
-          h={44}
-          disabled={!(num(remaining) >= 0) || !soonestId || record.isPending}
-          onClick={() => {
-            if (!soonestId) return
-            record.mutate({ ...base, kind: 'set', qty: num(remaining), batch_id: soonestId }, { onSuccess: () => setRemaining(null) })
-          }}
-        >
-          Apply
-        </Button>
-      </Group>
-
-      <Button
-        variant="light"
-        disabled={!soonestId || record.isPending}
-        onClick={() => {
-          if (!soonestId) return
-          record.mutate({ ...base, kind: 'finished', batch_id: soonestId })
-        }}
-      >
-        Finished
-      </Button>
+      {dirty && (
+        <div className="sp-savebar" role="region" aria-label="Unsaved changes">
+          <Button onClick={() => save.mutate()} disabled={!view.lines.every(valid)} loading={save.isPending}>Save changes</Button>
+          <Button variant="default" onClick={() => { setDraft(null); save.reset() }} disabled={save.isPending}>Discard</Button>
+        </div>
+      )}
     </Stack>
   )
 }
