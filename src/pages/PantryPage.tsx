@@ -112,7 +112,7 @@ export default function PantryPage() {
   const visible = view.shown.filter((id) => byId.get(id)?.name.toLowerCase().includes(needle))
 
   return (
-    <Stack>
+    <Stack className="sp-pantry">
       <Title order={2}>Pantry</Title>
 
       <UseSoon />

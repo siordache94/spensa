@@ -21,3 +21,6 @@
 }
 .sp-side .sp-tab[aria-current='page'] { box-shadow: none; background: rgba(245, 204, 59, 0.14); }
 :root[data-spensa-theme='light'] .sp-side .sp-tab[aria-current='page'] { background: var(--sp-yellow); }
+
+/* Ultrawide: content stops growing at 1600px and centres in the space beside the nav. */
+.sp-content { max-width: 1600px; margin-inline: auto; }

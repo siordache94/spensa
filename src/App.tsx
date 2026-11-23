@@ -141,6 +141,7 @@ function Shell({ household }: { household: Household }) {
       </AppShell.Navbar>
 
       <AppShell.Main>
+        <div className="sp-content">
         <Routes>
           <Route path="/" element={<PlanPage />} />
           <Route path="/recipes" element={<RecipesPage />} />
@@ -149,6 +150,7 @@ function Shell({ household }: { household: Household }) {
           <Route path="/ingredients" element={<IngredientsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
+        </div>
       </AppShell.Main>
 
       <AppShell.Footer hiddenFrom="sm" className="sp-nav">

@@ -67,7 +67,9 @@
   position: fixed; z-index: 90; left: 8px; right: 8px; bottom: 68px;
 }
 @media (min-width: 48em) {
-  .sp-dock { left: 208px; right: 8px; bottom: 8px; max-width: 640px; }
+  /* sticky inside the content column, so it follows the centred layout on wide screens */
+  .sp-shop { max-width: 760px; margin-inline: auto; }
+  .sp-dock { position: sticky; left: auto; right: auto; bottom: 8px; max-width: 640px; margin: 16px 16px 0; }
   .sp-shop { padding-bottom: 100px; }
 }
 .sp-pass {

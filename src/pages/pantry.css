@@ -27,9 +27,10 @@
 }
 .sp-savebar > :first-child { flex: 1; }
 @media (min-width: 48em) {
-  .sp-savebar { left: 208px; right: 8px; bottom: 8px; max-width: 640px; }
+  .sp-savebar { position: sticky; left: auto; right: auto; bottom: 8px; max-width: 640px; margin-top: 16px; }
   /* rows stay readable: the ✕ sits next to its batch, not across the screen */
-  .sp-inv-body { max-width: 720px; margin-inline: 0; }
+  .sp-pantry { max-width: 760px; margin-inline: auto; }
+  .sp-inv-body { margin-inline: 0; }
 }
 .sp-inv-hint { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; font: 600 12px/1 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); }
 .sp-inv-hint::before { content: ''; width: 6px; height: 6px; background: var(--sp-accent); }
