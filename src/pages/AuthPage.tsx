@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Alert, Button, Center, Divider, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
-import { supabase } from '../lib/supabase.ts'
-
-const INVITE_ONLY = 'Spensa is invite-only. Ask a household member for an invite link.'
+import { useCommand } from '../lib/api/command.ts'
+import { signIn, signInWithGoogle, signUp } from '../lib/api/auth.ts'
 
 export default function AuthPage() {
   const inviteFromLink = new URLSearchParams(window.location.search).get('invite') ?? ''
@@ -11,38 +10,20 @@ export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const onFailure = (e: Error) => setError(e.message)
+  const google = useCommand(signInWithGoogle, { onError: onFailure })
+  const signingInCmd = useCommand(signIn, { onError: onFailure })
+  const signingUpCmd = useCommand(signUp, { onError: onFailure })
+  const busy = signingInCmd.isPending || signingUpCmd.isPending
 
-  async function signInWithGoogle() {
-    setError(null)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.href },
-    })
-    if (error) setError(error.message)
-  }
-
-  async function submit(e: FormEvent) {
+  function submit(e: FormEvent) {
     e.preventDefault()
     if (!email.trim()) return setError('Enter your email.')
     if (password.length < 8) return setError('Password must be at least 8 characters.')
 
     setError(null)
-    setBusy(true)
-    const credentials = { email: email.trim(), password }
-    const { error } =
-      mode === 'signIn'
-        ? await supabase.auth.signInWithPassword(credentials)
-        : await supabase.auth.signUp({
-            ...credentials,
-            options: { data: inviteCode.trim() ? { invite_code: inviteCode.trim() } : undefined },
-          })
-    setBusy(false)
-    if (error) {
-      // The server's "before user created" hook refuses signups without an allowlisted email or valid invite code.
-      const refused = mode === 'signUp' && (error.status === 403 || error.message.includes('invite-only'))
-      setError(refused ? INVITE_ONLY : error.message)
-    }
+    if (mode === 'signIn') signingInCmd.mutate({ email, password })
+    else signingUpCmd.mutate({ email, password, inviteCode })
   }
 
   const signingIn = mode === 'signIn'
@@ -54,7 +35,7 @@ export default function AuthPage() {
           <Stack>
             <Title order={2}>{signingIn ? 'Sign in' : 'Create account'}</Title>
             {error && <Alert color="red">{error}</Alert>}
-            <Button type="button" variant="default" onClick={signInWithGoogle}>
+            <Button type="button" variant="default" onClick={() => { setError(null); google.mutate() }}>
               Continue with Google
             </Button>
             <Divider label="or" labelPosition="center" />

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Alert, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useQueryClient } from '@tanstack/react-query'
 import { IconBell } from '@tabler/icons-react'
-import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
-import { dismissPrompt, enablePush, promptDismissed, pushConfigured, useDeviceSubscribed, useInstallApp, usePushStatus, type Prompt } from '../lib/push.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { useMyId } from '../lib/api/auth.ts'
+import { memberLabel, useMembers } from '../lib/api/household.ts'
+import { enableNotifications, useDeviceSubscribed } from '../lib/api/push.ts'
+import { dismissPrompt, promptDismissed, pushConfigured, useInstallApp, usePushStatus, type Prompt } from '../lib/push.ts'
 
 /** The iOS Share button, drawn inline so the instruction can point at the real thing. */
 export function ShareIcon() {
@@ -33,10 +35,12 @@ export default function NotifyPrompt() {
   const install = useInstallApp()
   const members = useMembers().data
   const me = useMyId()
-  const queryClient = useQueryClient()
   const [notifyHidden, hideNotify] = useDismiss('notify')
   const [installHidden, hideInstall] = useDismiss('install')
-  const [busy, setBusy] = useState(false)
+  const turnOn = useCommand(enableNotifications, {
+    onSuccess: () => notifications.show({ message: 'Notifications are on. You can change them in Settings.' }),
+    onError: (e) => notifications.show({ color: 'red', title: 'Could not turn on notifications', message: e.message }),
+  })
 
   if (!pushConfigured) return null
 
@@ -53,19 +57,6 @@ export default function NotifyPrompt() {
 
   const partner = members?.filter((m) => m.user_id !== me).map((m) => (m.display_name ? memberLabel(m) : null)).find(Boolean) ?? 'your partner'
 
-  async function turnOn() {
-    setBusy(true)
-    try {
-      await enablePush()
-      await queryClient.invalidateQueries({ queryKey: ['push'] })
-      notifications.show({ message: 'Notifications are on. You can change them in Settings.' })
-    } catch (e) {
-      notifications.show({ color: 'red', title: 'Could not turn on notifications', message: (e as Error).message })
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <Paper withBorder p="sm">
       <Stack gap="xs">
@@ -76,7 +67,7 @@ export default function NotifyPrompt() {
         <Group gap="xs" justify="flex-end">
           {install && <Button variant="subtle" size="sm" onClick={() => void install()}>Install app</Button>}
           <Button variant="default" size="sm" onClick={hideNotify}>Not now</Button>
-          <Button size="sm" loading={busy} onClick={turnOn}>Turn on</Button>
+          <Button size="sm" loading={turnOn.isPending} onClick={() => turnOn.mutate()}>Turn on</Button>
         </Group>
       </Stack>
     </Paper>

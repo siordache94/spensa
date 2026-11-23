@@ -1,21 +1,19 @@
 import { addDays, type Day } from '../domain/replay.ts'
 
+import { readJson, writeJson } from './storage.ts'
+
 // A shopping trip is inferred, never stored (CONTEXT.md): today through the household horizon, minus the
 // planned meals flagged `skip_shopping`. Only the partner-highlight acks below are per device.
 
 const ACK_KEY = 'spensa.shop.acked'
 
 export function loadAcked(): string[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(ACK_KEY) ?? '[]') as unknown
-    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
+  const raw = readJson<unknown[]>(ACK_KEY, Array.isArray, [])
+  return raw.filter((x): x is string => typeof x === 'string')
 }
 
 export function saveAcked(ids: string[]) {
-  try { localStorage.setItem(ACK_KEY, JSON.stringify(ids.slice(-200))) } catch { /* session only */ }
+  writeJson(ACK_KEY, ids.slice(-200)) // session only when the write fails
 }
 
 /** The days a trip shops for: today through `horizonDays` days (1 = today only). */

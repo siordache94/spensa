@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { readJson, writeJson } from './storage.ts'
 
 export type ThemeName = 'light' | 'dark' | 'amoled'
 export type Density = 'compact' | 'airy'
@@ -11,21 +12,18 @@ const META_COLOR: Record<ThemeName, string> = { light: '#E6E8EB', dark: '#0B0D10
 
 type Stored = { theme?: ThemeName; density?: Density }
 
+const isStored = (v: unknown): v is Stored => typeof v === 'object' && v !== null
+
 function read(): Stored {
-  try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Stored
-    const out: Stored = {}
-    if (themes.includes(raw.theme as ThemeName)) out.theme = raw.theme
-    if (densities.includes(raw.density as Density)) out.density = raw.density
-    return out
-  } catch {
-    return {}
-  }
+  const raw = readJson<Stored>(KEY, isStored, {})
+  const out: Stored = {}
+  if (themes.includes(raw.theme as ThemeName)) out.theme = raw.theme
+  if (densities.includes(raw.density as Density)) out.density = raw.density
+  return out
 }
 
-function write(s: Stored) {
-  try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* private mode: setting lasts this session only */ }
-}
+// private mode: the setting lasts this session only
+const write = (s: Stored) => writeJson(KEY, s)
 
 const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null
 let stored: Stored = read()

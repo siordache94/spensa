@@ -1,3 +1,4 @@
+import { round3 } from '../lib/format.ts'
 import type { Day } from './replay.ts'
 
 /** One batch line in the pantry editor. batchId null = a line added in this edit (a new purchase). */
@@ -21,8 +22,6 @@ export type PantryEdits = {
   /** Expiry corrections on existing batches (a fix to the batch, not stock movement). */
   expiries: { batch_id: string; expires_on: Day | null }[]
 }
-
-const round3 = (n: number) => Number(n.toFixed(3))
 
 /** What the user changed: only differences between the lines when editing began (base) and the draft are returned. */
 export function diffEdits(base: EditLine[], draft: EditLine[]): PantryEdits {

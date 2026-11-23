@@ -3,33 +3,27 @@ import { Button, Group, SegmentedControl, Stack, Text, TextInput, Title } from '
 import { TimeInput } from '@mantine/dates'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMembers, useMyId } from '../lib/members.ts'
-import { supabase } from '../lib/supabase.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { useMyId } from '../lib/api/auth.ts'
+import { saveYourName, updateHousehold, useHouseholdSettings, useMembers } from '../lib/api/household.ts'
 import { PrivacyAndData } from './AccountData.tsx'
 import NotificationSettings from '../components/NotificationSettings.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
-import { useSaveSlotEndTimes, useSlotEndTimes, slotLabel } from '../lib/checkins.ts'
-import { isEndTime } from '../lib/checkin.ts'
+import { useSaveSlotEndTimes, useSlotEndTimes } from '../lib/api/checkins.ts'
+import { isEndTime, slotLabel } from '../lib/checkin.ts'
+
+const notifyFailure = (title: string) => (e: Error) => notifications.show({ color: 'red', title, message: e.message })
 
 function YourName() {
-  const queryClient = useQueryClient()
   const me = useMyId()
   const members = useMembers()
   const saved = members.data?.find((m) => m.user_id === me)?.display_name ?? ''
   const [value, setValue] = useState('')
   useEffect(() => setValue(saved), [saved])
-  const save = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('household_members').update({ display_name: value.trim() }).eq('user_id', me!)
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household', 'members'] }),
-    onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }),
-  })
+  const save = useCommand(saveYourName, { onError: notifyFailure('Could not save') })
   const clean = value.trim()
   return (
-    <form onSubmit={(e) => { e.preventDefault(); save.mutate() }}>
+    <form onSubmit={(e) => { e.preventDefault(); if (me) save.mutate({ userId: me, displayName: clean }) }}>
       <Group align="flex-end" wrap="nowrap">
         <TextInput
           style={{ flex: 1 }}
@@ -49,15 +43,7 @@ const intIn = (v: number | null, min: number, max: number): v is number => v != 
 
 /** Settings every member shares: they live on the household row and sync to both phones. */
 function HouseholdSettings() {
-  const queryClient = useQueryClient()
-  const household = useQuery({
-    queryKey: ['household', 'settings'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, expiry_reminder_days, slots').single()
-      if (error) throw error
-      return data
-    },
-  })
+  const household = useHouseholdSettings()
   const saved = household.data
   const [horizon, setHorizon] = useState<number | null>(7)
   const [expiring, setExpiring] = useState<number | null>(3)
@@ -65,14 +51,7 @@ function HouseholdSettings() {
   useEffect(() => {
     if (saved) { setHorizon(saved.horizon_days); setExpiring(saved.expiring_days); setReminder(saved.expiry_reminder_days) }
   }, [saved])
-  const save = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('households').update({ horizon_days: horizon!, expiring_days: expiring!, expiry_reminder_days: reminder! }).not('id', 'is', null)
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household', 'settings'] }),
-    onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }),
-  })
+  const save = useCommand(updateHousehold, { onError: notifyFailure('Could not save') })
   const valid = intIn(horizon, 1, 14) && intIn(expiring, 0, 60) && intIn(reminder, 0, 14)
   const changed = !!saved && (horizon !== saved.horizon_days || expiring !== saved.expiring_days || reminder !== saved.expiry_reminder_days)
   return (
@@ -115,7 +94,13 @@ function HouseholdSettings() {
         onChange={setReminder}
         error={reminder !== null && !intIn(reminder, 0, 14) ? 'Between 0 and 14' : undefined}
       />
-      <Button loading={save.isPending} disabled={!saved || !valid || !changed} onClick={() => save.mutate()}>Save household settings</Button>
+      <Button
+        loading={save.isPending}
+        disabled={!saved || !valid || !changed}
+        onClick={() => save.mutate({ horizon_days: horizon!, expiring_days: expiring!, expiry_reminder_days: reminder! })}
+      >
+        Save household settings
+      </Button>
     </Stack>
   )
 }
@@ -147,7 +132,7 @@ function SlotEndTimes() {
       <Button
         loading={save.isPending}
         disabled={!valid || !changed}
-        onClick={() => save.mutate(Object.fromEntries(slots.map((s) => [s, times[s]])), { onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }) })}
+        onClick={() => save.mutate(Object.fromEntries(slots.map((s) => [s, times[s]])), { onError: notifyFailure('Could not save') })}
       >
         Save meal end times
       </Button>

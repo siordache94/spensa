@@ -7,12 +7,22 @@ import type { PantryEdits } from '../../domain/pantryEdits.ts'
 import { mealLinesPayload } from '../../domain/mealLines.ts'
 import type { MealAmount } from '../../domain/replay.ts'
 import {
-  ApiError, type DataPort, type HouseholdSettings, type PantryMealRow, type PantrySnapshotRow, type Recipe, type SnapshotBatch, type UnreadCheckinRow,
+  ApiError, type AuthSession, type DataPort, type HouseholdRow, type HouseholdSettings, type Member, type PantryMealRow, type PantrySnapshotRow,
+  type PushPrefsRow, type PushTestResult, type Recipe, type SnapshotBatch, type UnreadCheckinRow,
 } from './port.ts'
 
 export type FakeState = {
   userId: string | null
   household: HouseholdSettings
+  /** The household row (name, invite code), null before the user joins or creates one. */
+  householdRow: HouseholdRow | null
+  members: Member[]
+  /** The user's push prefs row, null until they turn notifications on. */
+  prefs: PushPrefsRow | null
+  /** Endpoints of the devices with a saved push subscription. */
+  pushEndpoints: string[]
+  /** What push.test() answers. */
+  pushTest: PushTestResult
   ingredients: Tables<'ingredients'>[]
   /** Live recipes' ingredient lines: what `ingredients.usage` and the delete guard look at. */
   recipeLines: { ingredientId: string; recipeName: string }[]
@@ -36,6 +46,8 @@ export type FakeApi = DataPort & {
   calls: string[]
   /** Makes the household events feed fire, as a partner's write would. `by` = the writer's user id. */
   emitHouseholdEvent(by: string | null): void
+  /** Makes the session feed fire, as a sign-in or sign-out would. */
+  emitSessionChange(signedIn: boolean): void
   /** Make the next call of 'group.method' throw. Fires once. */
   failNext(call: string, error?: Error): void
 }
@@ -72,13 +84,16 @@ export const row = {
 export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
   const state: FakeState = {
     userId: 'u1',
-    household: { id: 'h1', timezone: 'UTC', expiring_days: 3, horizon_days: 7, slots: ['lunch', 'dinner'], slot_end_times: {} },
+    household: { id: 'h1', timezone: 'UTC', expiring_days: 3, horizon_days: 7, expiry_reminder_days: 2, slots: ['lunch', 'dinner'], slot_end_times: {} },
+    householdRow: { id: 'h1', name: 'Casa', invite_code: 'INVITE1' },
+    members: [], prefs: null, pushEndpoints: [], pushTest: { sent: 1, gone: 0, failed: 0 },
     ingredients: [], recipeLines: [], batches: [], meals: [], adjustments: [], snapshot: undefined, shoppingItems: [], recipes: [],
     unreadCheckins: [], savedEdits: [], finishedShopping: [],
     ...seed,
   }
   const calls: string[] = []
   const listeners = new Set<(by: string | null) => void>()
+  const sessionListeners = new Set<(signedIn: boolean) => void>()
   const failures = new Map<string, Error>()
   /** Wraps every method of one port group: logs the call, can be made to fail, and returns a promise. Methods may be sync. */
   const track = <K extends keyof DataPort>(
@@ -109,10 +124,33 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
   }
 
   const api: DataPort = {
-    auth: track('auth', { currentUserId: () => state.userId }),
+    auth: track('auth', {
+      currentUserId: () => state.userId,
+      session: (): AuthSession | null => (state.userId ? { userId: state.userId, metadata: {} } : null),
+      // shortcut: no password check; the fake accepts any sign-in (a test that needs a refusal uses failNext)
+      signIn: () => {},
+      signUp: () => {},
+      signInWithGoogle: () => {},
+      signOut: () => { state.userId = null },
+      // shortcut: the fake's user always exists
+      verifyUser: () => 'ok' as const,
+    }),
     household: track('household', {
       settings: () => state.household,
-      saveSlots: (slots) => { state.household.slots = slots },
+      current: () => state.householdRow,
+      update: (patch) => { Object.assign(state.household, patch) },
+      rotateInviteCode: () => {
+        if (state.householdRow) state.householdRow.invite_code = `ROTATED-${++seq}`
+      },
+      create: (name) => { state.householdRow = { id: 'h-new', name, invite_code: 'NEWCODE' } },
+      join: (code) => {
+        if (code !== state.householdRow?.invite_code) throw new ApiError('invalid invite code')
+      },
+      members: () => [...state.members].sort((a, b) => (a.display_name ?? '').localeCompare(b.display_name ?? '')),
+      setMemberName: (userId, displayName) => {
+        const m = state.members.find((x) => x.user_id === userId)
+        if (m) m.display_name = displayName
+      },
     }),
     recipes: track('recipes', {
       list: () => [...live(state.recipes)].sort((a, b) => a.name.localeCompare(b.name)),
@@ -135,14 +173,6 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         if (!existing) state.recipes.push(target)
         // shortcut: no unique-name check on recipes (the real RPC's rules are not known to the fake)
         syncRecipeLines(target, previousName)
-      },
-      createIngredient: (input) => {
-        if (live(state.ingredients).some((i) => i.name.toLowerCase() === input.name.toLowerCase())) {
-          throw new ApiError('duplicate key value violates unique constraint', '23505')
-        }
-        const created = row.ingredient({ name: input.name, unit: input.unit })
-        state.ingredients.push(created)
-        return created
       },
     }),
     plan: track('plan', {
@@ -170,6 +200,14 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         const existing = state.ingredients.find((i) => i.id === ingredientId)
         if (existing) Object.assign(existing, input)
         else state.ingredients.push(row.ingredient(input))
+      },
+      create: (input) => {
+        if (live(state.ingredients).some((i) => i.name.toLowerCase() === input.name?.toLowerCase())) {
+          throw new ApiError('duplicate key value violates unique constraint', '23505')
+        }
+        const created = row.ingredient({ name: input.name, unit: input.unit })
+        state.ingredients.push(created)
+        return created.id
       },
       setOnHand: (ingredientId, onHand) => {
         const i = state.ingredients.find((x) => x.id === ingredientId)
@@ -248,7 +286,24 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         listeners.add(onEvent)
         return () => { listeners.delete(onEvent) }
       },
+      onSessionChange: (onChange: (signedIn: boolean) => void) => {
+        sessionListeners.add(onChange)
+        return () => { sessionListeners.delete(onChange) }
+      },
     },
+    account: track('account', {
+      // shortcut: the export is a stub; the page only needs it to be a JSON-able value
+      exportData: () => ({ user: state.userId }),
+      deleteAccount: () => { state.userId = null },
+    }),
+    push: track('push', {
+      saveSubscription: (endpoint) => { if (!state.pushEndpoints.includes(endpoint)) state.pushEndpoints.push(endpoint) },
+      deleteSubscription: (endpoint) => { state.pushEndpoints = state.pushEndpoints.filter((e) => e !== endpoint) },
+      prefs: () => state.prefs,
+      ensurePrefs: (defaults) => { state.prefs ??= defaults },
+      savePrefs: (prefs) => { state.prefs = prefs },
+      test: () => state.pushTest,
+    }),
     trash: track('trash', {
       softDelete: (table, ids) => {
         if (table === 'ingredients') {
@@ -282,5 +337,6 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     state,
     calls,
     emitHouseholdEvent: (by) => { for (const l of listeners) l(by) },
+    emitSessionChange: (signedIn) => { for (const l of sessionListeners) l(signedIn) },
     failNext: (call, error = new Error(`fake failure: ${call}`)) => void failures.set(call, error) }
 }

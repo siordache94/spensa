@@ -1,58 +1,51 @@
 import { useState } from 'react'
 import { Alert, Anchor, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { exportMyData, useDeleteAccount } from '../lib/api/account.ts'
 
 const CONFIRM_WORD = 'DELETE'
 // Deployers point this at their own filled-in notice (see PRIVACY.md).
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || 'https://github.com/siordache94/spensa/blob/main/PRIVACY.md'
 
+function download(data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `spensa-export-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 function ExportData() {
-  const [busy, setBusy] = useState(false)
-  async function download() {
-    setBusy(true)
-    const { data, error } = await supabase.rpc('export_my_data')
-    setBusy(false)
-    if (error) return notifications.show({ color: 'red', title: 'Could not export', message: error.message })
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `spensa-export-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
+  const exp = useCommand(exportMyData, {
+    onSuccess: download,
+    onError: (e) => notifications.show({ color: 'red', title: 'Could not export', message: e.message }),
+  })
   return (
     <Stack gap={6} align="flex-start">
       <Text fw={600} className="sp-label">Download my data</Text>
       <Text size="sm" c="dimmed">
         A JSON file with your account details and everything your household holds, including items you deleted.
       </Text>
-      <Button variant="default" loading={busy} onClick={download}>Download my data</Button>
+      <Button variant="default" loading={exp.isPending} onClick={() => exp.mutate()}>Download my data</Button>
     </Stack>
   )
 }
 
 function DeleteAccount() {
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const del = useDeleteAccount({ onError: () => setError('Could not delete your account. Nothing was lost; try again.') })
+  const busy = del.isPending
 
-  async function purge() {
-    setBusy(true)
+  function purge() {
     setError(null)
-    const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' })
-    if (error) {
-      setBusy(false)
-      return setError('Could not delete your account. Nothing was lost; try again.')
-    }
-    queryClient.clear()
-    await supabase.auth.signOut({ scope: 'local' }) // the server session is already gone
+    del.mutate()
   }
 
   return (

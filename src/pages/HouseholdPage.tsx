@@ -1,44 +1,38 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Alert, Button, Center, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
-import { useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
-
-function friendlyError(message: string) {
-  if (message.includes('invalid invite code')) return "That invite code doesn't match any household."
-  return 'Something went wrong. Try again.'
-}
+import { useCommand } from '../lib/api/command.ts'
+import { signOut, useAuthSession } from '../lib/api/auth.ts'
+import { createHousehold, joinHousehold } from '../lib/api/household.ts'
 
 export default function HouseholdPage() {
-  const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
   const [yourName, setYourName] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const full = data.session?.user.user_metadata?.full_name
-      if (typeof full === 'string') setYourName((cur) => cur || full.slice(0, 40))
-      const invite = data.session?.user.user_metadata?.invite_code
-      if (typeof invite === 'string') setCode((cur) => cur || invite)
-    })
-  }, [])
-
-  const display_name = yourName.trim() || undefined
-
-  async function run(call: () => PromiseLike<{ error: { message: string } | null }>) {
-    setError(null)
-    setBusy(true)
-    const { error } = await call()
-    setBusy(false)
-    if (error) {
-      console.error(error)
-      return setError(friendlyError(error.message))
-    }
-    window.history.replaceState(null, '', window.location.pathname)
-    await queryClient.invalidateQueries({ queryKey: ['household'] })
+  // Sign-up details (name, invite code) fill the empty fields once, when the session first arrives.
+  const session = useAuthSession()
+  const [prefilledFrom, setPrefilledFrom] = useState<typeof session.data>(undefined)
+  if (session.data && session.data !== prefilledFrom) {
+    setPrefilledFrom(session.data)
+    const full = session.data.metadata.full_name
+    const invite = session.data.metadata.invite_code
+    if (typeof full === 'string') setYourName((cur) => cur || full.slice(0, 40))
+    if (typeof invite === 'string') setCode((cur) => cur || invite)
   }
+
+  const displayName = yourName.trim() || undefined
+
+  const onFailure = (err: Error) => {
+    console.error(err)
+    setError(err.message)
+  }
+  // The commands refresh the household row, and App then shows the shell instead of this page.
+  const onDone = () => window.history.replaceState(null, '', window.location.pathname)
+  const create = useCommand(createHousehold, { onSuccess: onDone, onError: onFailure })
+  const join = useCommand(joinHousehold, { onSuccess: onDone, onError: onFailure })
+  const leave = useCommand(signOut)
+  const busy = create.isPending || join.isPending
 
   return (
     <Center mih="100vh" p="md">
@@ -59,7 +53,7 @@ export default function HouseholdPage() {
         />
 
         <Paper p="lg" withBorder>
-          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('create_household', { name: name.trim(), display_name })) }}>
+          <form onSubmit={(e) => { e.preventDefault(); setError(null); create.mutate({ name: name.trim(), displayName }) }}>
             <Stack>
               <Title order={3}>Create a household</Title>
               <TextInput label="Household name" placeholder="e.g. Casa Rossi" value={name} onChange={(e) => setName(e.currentTarget.value)} />
@@ -69,7 +63,7 @@ export default function HouseholdPage() {
         </Paper>
 
         <Paper p="lg" withBorder>
-          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('join_household', { code: code.trim(), display_name })) }}>
+          <form onSubmit={(e) => { e.preventDefault(); setError(null); join.mutate({ code: code.trim(), displayName }) }}>
             <Stack>
               <Title order={3}>Join a household</Title>
               <TextInput
@@ -83,7 +77,7 @@ export default function HouseholdPage() {
           </form>
         </Paper>
 
-        <Button variant="subtle" onClick={() => supabase.auth.signOut()}>Sign out</Button>
+        <Button variant="subtle" onClick={() => leave.mutate()}>Sign out</Button>
       </Stack>
     </Center>
   )

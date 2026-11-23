@@ -11,10 +11,13 @@ import type { CheckinAnswer } from '../checkin.ts'
 /** Thrown by every adapter. `code` is the Postgres error code when there is one (23505 unique, 23503 foreign key). */
 export class ApiError extends Error {
   code: string | undefined
-  constructor(message: string, code?: string) {
+  /** HTTP status, auth errors only (403 on a refused sign-up). */
+  status: number | undefined
+  constructor(message: string, code?: string, status?: number) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.status = status
   }
 }
 
@@ -32,7 +35,20 @@ export type SoftTable =
   | 'snapshots'
   | 'shopping_items'
 
-export type HouseholdSettings = Pick<Tables<'households'>, 'id' | 'timezone' | 'expiring_days' | 'horizon_days' | 'slots' | 'slot_end_times'>
+export type HouseholdSettings = Pick<
+  Tables<'households'>,
+  'id' | 'timezone' | 'expiring_days' | 'horizon_days' | 'expiry_reminder_days' | 'slots' | 'slot_end_times'
+>
+/** The household row the signed-in user belongs to (null before they join or create one). */
+export type HouseholdRow = Pick<Tables<'households'>, 'id' | 'name' | 'invite_code'>
+/** What the settings screen can change on the household row. */
+export type HouseholdUpdate = Partial<Pick<Tables<'households'>, 'name' | 'timezone' | 'expiring_days' | 'horizon_days' | 'expiry_reminder_days' | 'slots'>>
+export type Member = { user_id: string; display_name: string | null }
+/** The locally stored session, as far as the app reads it. */
+export type AuthSession = { userId: string; metadata: Record<string, unknown> }
+export type PushPrefsRow = Pick<Tables<'push_prefs'>, 'list_changes' | 'meal_checkins' | 'expiry_time'>
+/** The push service's answer to a test notification. */
+export type PushTestResult = { sent: number; gone: number; failed: number }
 
 export type Recipe = Tables<'recipes'> & {
   recipe_ingredients: {
@@ -101,11 +117,31 @@ export interface DataPort {
   auth: {
     /** From the locally stored session, so it works offline. */
     currentUserId(): Promise<string | null>
+    /** The locally stored session (null when signed out). */
+    session(): Promise<AuthSession | null>
+    /** Throws ApiError (with status) when the server refuses. */
+    signIn(email: string, password: string): Promise<void>
+    /** `inviteCode` undefined when the page has none. Throws ApiError with status 403 when the sign-up is refused. */
+    signUp(email: string, password: string, inviteCode: string | undefined): Promise<void>
+    /** Starts the Google redirect. `redirectTo` is where Google sends the user back. */
+    signInWithGoogle(redirectTo: string): Promise<void>
+    /** 'local' clears this device only (the server session is already gone). Errors are ignored, as before. */
+    signOut(scope: 'global' | 'local'): Promise<void>
+    /** Asks the server whether the session's user still exists. 'invalid' only when the server says so. */
+    verifyUser(): Promise<'ok' | 'invalid' | 'unreachable'>
   }
   household: {
     settings(): Promise<HouseholdSettings>
-    /** The meal slots, in day order. */
-    saveSlots(slots: string[]): Promise<void>
+    /** The household row of the signed-in user, or null. */
+    current(): Promise<HouseholdRow | null>
+    update(patch: HouseholdUpdate): Promise<void>
+    /** Gives the household a new invite code; the old code, link and QR stop working. */
+    rotateInviteCode(): Promise<void>
+    /** Throws ApiError with the server message when the name or the code is refused. */
+    create(name: string, displayName: string | undefined): Promise<void>
+    join(code: string, displayName: string | undefined): Promise<void>
+    members(): Promise<Member[]>
+    setMemberName(userId: string, displayName: string): Promise<void>
   }
   recipes: {
     list(): Promise<Recipe[]>
@@ -115,8 +151,6 @@ export interface DataPort {
     planned(recipeId: string): Promise<PlannedMeal[]>
     /** Throws ApiError with the server code when the RPC refuses. */
     save(input: RecipeSave): Promise<void>
-    /** Adds an ingredient from the recipe form's inline picker. Throws ApiError code 23505 when the name is taken. */
-    createIngredient(row: Pick<IngredientInput, 'name' | 'unit'>): Promise<Ingredient>
   }
   plan: {
     /** Adds a planned meal (a copy, or a new one from the planner). */
@@ -132,6 +166,8 @@ export interface DataPort {
     usage(ingredientId: string): Promise<string[]>
     /** `id` set = update, null = insert. Throws ApiError code 23505 when the name is taken. */
     save(id: string | null, row: IngredientInput): Promise<void>
+    /** Inserts an ingredient and returns its id. Throws ApiError code 23505 when the name is taken. */
+    create(row: Pick<IngredientInput, 'name' | 'unit'>): Promise<string>
     setOnHand(id: string, onHand: boolean): Promise<void>
   }
   pantry: {
@@ -170,6 +206,25 @@ export interface DataPort {
   live: {
     /** Calls `onEvent` for every change to the household's events row (`by` = who wrote it, null if unknown). Returns the unsubscribe. */
     subscribeHouseholdEvents(topic: string, onEvent: (by: string | null) => void): () => void
+    /** Calls `onChange` with whether a session exists after every sign-in, sign-out and token refresh. Returns the unsubscribe. */
+    onSessionChange(onChange: (signedIn: boolean) => void): () => void
+  }
+  account: {
+    /** Everything the household holds about the user, as the server returns it. */
+    exportData(): Promise<unknown>
+    /** Deletes the account on the server (the delete-account edge function). */
+    deleteAccount(): Promise<void>
+  }
+  push: {
+    saveSubscription(endpoint: string, p256dh: string, auth: string): Promise<void>
+    deleteSubscription(endpoint: string): Promise<void>
+    /** The signed-in user's prefs row, or null when there is none yet. */
+    prefs(): Promise<PushPrefsRow | null>
+    /** Stores the defaults only if the user has no prefs yet (never overwrites). */
+    ensurePrefs(defaults: PushPrefsRow): Promise<void>
+    savePrefs(prefs: PushPrefsRow): Promise<void>
+    /** Sends a test notification to the user's devices. Throws ApiError with the server's message when it cannot. */
+    test(): Promise<PushTestResult>
   }
   trash: {
     /** Soft-deletes rows (children go with their parent). Throws ApiError code 23503 when something live still uses them. */

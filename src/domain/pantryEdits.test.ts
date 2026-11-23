@@ -21,6 +21,11 @@ describe('diffEdits', () => {
     expect(r.newBatches).toEqual([{ ingredient_id: 'i2', qty: 3, expires_on: '2026-12-01' }])
     expect(r.adjustments).toEqual([])
   })
+  it('compares quantities at three decimals, rounding a half up (as the screens show them)', () => {
+    // toFixed would send 0.1235 down to 0.123 and report no change; round3 gives 0.124, so the edit is saved
+    const r = diffEdits([line({ key: 'b1', qty: 0.123 })], [line({ key: 'b1', qty: 0.1235 })])
+    expect(r.adjustments).toEqual([{ batch_id: 'b1', ingredient_id: 'i1', kind: 'set', qty: 0.1235 }])
+  })
   it('reports expiry corrections without an adjustment', () => {
     const r = diffEdits(base, [{ ...base[0], expiry: '2026-12-05' }, base[1]])
     expect(r).toEqual({ adjustments: [], newBatches: [], expiries: [{ batch_id: 'b1', expires_on: '2026-12-05' }] })

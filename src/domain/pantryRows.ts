@@ -1,4 +1,4 @@
-// Database rows -> replay input. Pure, so the phone (src/lib/pantry.ts) and the push edge functions
+// Database rows -> replay input. Pure, so the phone (src/lib/api/pantry.ts) and the push edge functions
 // (supabase/functions) build the very same events from the same rows.
 import type { Day, Ingredient, PantryEvents } from './replay.ts'
 

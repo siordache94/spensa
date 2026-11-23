@@ -1,11 +1,17 @@
 // Production adapter: DataPort over the Supabase client. All `supabase.` calls in the app belong in this file.
+import { isAuthApiError } from '@supabase/supabase-js'
 import { mealLinesPayload } from '../../domain/mealLines.ts'
 import { supabase } from '../supabase.ts'
-import { ApiError, type DataPort, type PantryRows, type ShoppingItemRow, type UnreadCheckinRow } from './port.ts'
+import { ApiError, type DataPort, type PantryRows, type PushTestResult, type ShoppingItemRow, type UnreadCheckinRow } from './port.ts'
 
 const check = (error: { message: string; code?: string } | null) => {
   if (error) throw new ApiError(error.message, error.code)
 }
+const authCheck = (error: { message: string; code?: string; status?: number } | null) => {
+  if (error) throw new ApiError(error.message, error.code, error.status)
+}
+
+const INVALID_USER_CODES = ['user_not_found', 'session_not_found', 'bad_jwt']
 
 const RECIPE_SELECT = '*, recipe_ingredients(ingredient_id, qty_per_portion, ingredients(name, unit))'
 
@@ -13,17 +19,77 @@ export const supabaseAdapter: DataPort = {
   auth: {
     // The local session is read from storage, so this works offline.
     currentUserId: async () => (await supabase.auth.getSession()).data.session?.user.id ?? null,
+    async session() {
+      const user = (await supabase.auth.getSession()).data.session?.user
+      return user ? { userId: user.id, metadata: user.user_metadata ?? {} } : null
+    },
+    async signIn(email, password) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      authCheck(error)
+    },
+    async signUp(email, password, inviteCode) {
+      // The server's "before user created" hook refuses signups without an allowlisted email or valid invite code.
+      const { error } = await supabase.auth.signUp({ email, password, options: { data: inviteCode ? { invite_code: inviteCode } : undefined } })
+      authCheck(error)
+    },
+    async signInWithGoogle(redirectTo) {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
+      authCheck(error)
+    },
+    async signOut(scope) {
+      await supabase.auth.signOut({ scope })
+    },
+    async verifyUser() {
+      // A local DB reset leaves a JWT for a user that no longer exists. Only a server-side "gone" answer is 'invalid'.
+      try {
+        const { data, error } = await supabase.auth.getUser()
+        if (!error && data.user) return 'ok'
+        const serverSaysGone = isAuthApiError(error) && ([401, 403, 404].includes(error.status) || INVALID_USER_CODES.includes(error.code ?? ''))
+        return serverSaysGone && navigator.onLine !== false ? 'invalid' : 'unreachable'
+      } catch {
+        return 'unreachable'
+      }
+    },
   },
 
   household: {
     async settings() {
-      const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots, slot_end_times').single()
+      const { data, error } = await supabase
+        .from('households')
+        .select('id, timezone, expiring_days, horizon_days, expiry_reminder_days, slots, slot_end_times')
+        .single()
       check(error)
       return data!
     },
-    async saveSlots(slots) {
+    async current() {
+      const { data, error } = await supabase.from('households').select('id, name, invite_code').maybeSingle()
+      check(error)
+      return data
+    },
+    async update(patch) {
       // household_id is not needed: RLS limits the update to the member's own household row
-      const { error } = await supabase.from('households').update({ slots }).not('id', 'is', null)
+      const { error } = await supabase.from('households').update(patch).not('id', 'is', null)
+      check(error)
+    },
+    async rotateInviteCode() {
+      const { error } = await supabase.rpc('rotate_invite_code')
+      check(error)
+    },
+    async create(name, displayName) {
+      const { error } = await supabase.rpc('create_household', { name, display_name: displayName })
+      check(error)
+    },
+    async join(code, displayName) {
+      const { error } = await supabase.rpc('join_household', { code, display_name: displayName })
+      check(error)
+    },
+    async members() {
+      const { data, error } = await supabase.from('household_members').select('user_id, display_name').order('display_name')
+      check(error)
+      return data!
+    },
+    async setMemberName(userId, displayName) {
+      const { error } = await supabase.from('household_members').update({ display_name: displayName }).eq('user_id', userId)
       check(error)
     },
   },
@@ -66,11 +132,6 @@ export const supabaseAdapter: DataPort = {
       })
       check(error)
     },
-    async createIngredient(row) {
-      const { data, error } = await supabase.from('ingredients').insert({ name: row.name, unit: row.unit }).select().single()
-      check(error)
-      return data!
-    },
   },
 
   plan: {
@@ -106,6 +167,11 @@ export const supabaseAdapter: DataPort = {
     async save(id, row) {
       const { error } = id ? await supabase.from('ingredients').update(row).eq('id', id) : await supabase.from('ingredients').insert(row)
       check(error)
+    },
+    async create(row) {
+      const { data, error } = await supabase.from('ingredients').insert({ name: row.name, unit: row.unit }).select('id').single()
+      check(error)
+      return data!.id
     },
     async setOnHand(id, onHand) {
       const { error } = await supabase.from('ingredients').update({ on_hand: onHand }).eq('id', id)
@@ -237,6 +303,55 @@ export const supabaseAdapter: DataPort = {
       })
       channel.subscribe()
       return () => { void supabase.removeChannel(channel) }
+    },
+    onSessionChange(onChange) {
+      const { data } = supabase.auth.onAuthStateChange((_event, next) => onChange(next !== null))
+      return () => data.subscription.unsubscribe()
+    },
+  },
+
+  account: {
+    async exportData() {
+      const { data, error } = await supabase.rpc('export_my_data')
+      check(error)
+      return data
+    },
+    async deleteAccount() {
+      const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' })
+      check(error)
+    },
+  },
+
+  push: {
+    async saveSubscription(endpoint, p256dh, auth) {
+      const { error } = await supabase.rpc('save_push_subscription', { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth })
+      check(error)
+    },
+    async deleteSubscription(endpoint) {
+      const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+      check(error)
+    },
+    async prefs() {
+      const { data, error } = await supabase.from('push_prefs').select('list_changes, meal_checkins, expiry_time').maybeSingle()
+      check(error)
+      return data
+    },
+    async ensurePrefs(defaults) {
+      const { error } = await supabase.from('push_prefs').upsert(defaults, { onConflict: 'user_id', ignoreDuplicates: true })
+      check(error)
+    },
+    async savePrefs(prefs) {
+      const { error } = await supabase.from('push_prefs').upsert(prefs, { onConflict: 'user_id' })
+      check(error)
+    },
+    async test() {
+      const { data, error } = await supabase.functions.invoke('push-test', { method: 'POST' })
+      if (error) {
+        const res = (error as { context?: Response }).context
+        const body = res ? await res.json().catch(() => null) as { error?: string } | null : null
+        throw new ApiError(body?.error ?? '')
+      }
+      return data as PushTestResult
     },
   },
 

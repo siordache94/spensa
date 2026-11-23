@@ -15,6 +15,7 @@ import { useSettings } from './lib/settings.ts'
 import { ApiProvider } from './lib/api/context.tsx'
 import { supabaseAdapter } from './lib/api/supabaseAdapter.ts'
 import { registerShopMutations } from './lib/shopMutations.ts'
+import { readRaw, removeKey, writeRaw } from './lib/storage.ts'
 
 const maxAge = 1000 * 60 * 60 * 24 * 7
 
@@ -24,11 +25,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: maxAg
 registerShopMutations(queryClient, supabaseAdapter)
 
 // localStorage can throw (private mode); the app then just runs without a persisted cache.
-const storage = {
-  getItem: (k: string) => { try { return localStorage.getItem(k) } catch { return null } },
-  setItem: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { /* ignore */ } },
-  removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { /* ignore */ } },
-}
+const storage = { getItem: readRaw, setItem: writeRaw, removeItem: removeKey }
 const persister = createSyncStoragePersister({ storage })
 
 function Root() {

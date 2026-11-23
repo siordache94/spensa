@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Button, Group, Stack, Switch, Text, Title } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
-import { useQueryClient } from '@tanstack/react-query'
-import { disablePush, enablePush, pushConfigured, sendTestPush, useDeviceSubscribed, useInstallApp, usePushPrefs, usePushStatus, useSavePrefs } from '../lib/push.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { disableNotifications, enableNotifications, savePushPrefs, sendTestNotification, useDeviceSubscribed, usePushPrefs } from '../lib/api/push.ts'
+import { pushConfigured, useInstallApp, usePushStatus } from '../lib/push.ts'
 import { isTime } from '../lib/pushState.ts'
 import { ShareIcon } from './NotifyPrompt.tsx'
 
@@ -14,31 +15,25 @@ export default function NotificationSettings() {
   const status = usePushStatus()
   const subscribed = useDeviceSubscribed()
   const prefs = usePushPrefs()
-  const save = useSavePrefs()
+  const save = useCommand(savePushPrefs, { onError: fail('Could not save') })
   const install = useInstallApp()
-  const queryClient = useQueryClient()
-  const [busy, setBusy] = useState<'on' | 'off' | 'test' | null>(null)
+  const turnOn = useCommand(enableNotifications, { onError: fail('Could not turn on notifications') })
+  const turnOff = useCommand(disableNotifications, {
+    onSuccess: () => notifications.show({ message: 'Notifications are off on this device.' }),
+    onError: fail('Could not turn off notifications'),
+  })
+  const test = useCommand(sendTestNotification, {
+    onSuccess: () => notifications.show({ message: 'Sent. It should arrive in a few seconds.' }),
+    onError: fail('Test failed'),
+  })
   const [time, setTime] = useState<string | null>(null) // what is typed, until it is a valid time
 
   if (!pushConfigured) return null
 
-  async function run(what: 'on' | 'off' | 'test', fn: () => Promise<void>, title: string, done?: string) {
-    setBusy(what)
-    try {
-      await fn()
-      await queryClient.invalidateQueries({ queryKey: ['push'] })
-      if (done) notifications.show({ message: done })
-    } catch (e) {
-      fail(title)(e as Error)
-    } finally {
-      setBusy(null)
-    }
-  }
-
   const p = prefs.data
   const on = subscribed.data === true
   const shownTime = time ?? p?.expiry_time ?? '09:00'
-  const patch = (next: Partial<NonNullable<typeof p>>) => p && save.mutate({ ...p, ...next }, { onError: fail('Could not save') })
+  const patch = (next: Partial<NonNullable<typeof p>>) => p && save.mutate({ ...p, ...next })
 
   return (
     <Stack gap="md">
@@ -54,8 +49,8 @@ export default function NotificationSettings() {
         <Group justify="space-between" wrap="nowrap">
           <Text size="sm">{on ? 'This device gets notifications.' : 'This device does not get notifications.'}</Text>
           {on
-            ? <Button variant="default" size="sm" loading={busy === 'off'} onClick={() => run('off', disablePush, 'Could not turn off notifications', 'Notifications are off on this device.')}>Turn off</Button>
-            : <Button size="sm" loading={busy === 'on'} disabled={subscribed.isPending} onClick={() => run('on', enablePush, 'Could not turn on notifications')}>Turn on</Button>}
+            ? <Button variant="default" size="sm" loading={turnOff.isPending} onClick={() => turnOff.mutate()}>Turn off</Button>
+            : <Button size="sm" loading={turnOn.isPending} disabled={subscribed.isPending} onClick={() => turnOn.mutate()}>Turn on</Button>}
         </Group>
       )}
       {install && <Button variant="default" size="sm" onClick={() => void install()}>Install app</Button>}
@@ -99,7 +94,7 @@ export default function NotificationSettings() {
       )}
 
       {status === 'available' && on && (
-        <Button variant="default" loading={busy === 'test'} onClick={() => run('test', sendTestPush, 'Test failed', 'Sent. It should arrive in a few seconds.')}>
+        <Button variant="default" loading={test.isPending} onClick={() => test.mutate()}>
           Send me a test notification
         </Button>
       )}

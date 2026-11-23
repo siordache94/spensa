@@ -38,6 +38,20 @@ export const saveIngredient = defineCommand<{ id: string | null; row: Ingredient
   invalidates: () => [keys.ingredients.all()],
 })
 
+/** Inline "Create ..." in the recipe form's ingredient picker. The output is the new id, so the line can point at it. */
+export const createIngredient = defineCommand<{ name: string; unit: Ingredient['unit'] }, string>({
+  name: 'ingredients.create',
+  run: async (api, input) => {
+    try {
+      return await api.ingredients.create(input)
+    } catch (e) {
+      if (e instanceof ApiError && e.code === '23505') throw new Error('An ingredient with this name already exists.')
+      throw e
+    }
+  },
+  invalidates: () => [keys.ingredients.all()],
+})
+
 export const deleteIngredient = defineCommand<{ id: string }>({
   name: 'ingredients.delete',
   run: async (api, { id }) => {

@@ -12,6 +12,12 @@ import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import type { SnapshotBatch, UnreadCheckinRow } from './port.ts'
 
+/** A meal's own amounts from the pantry data (`usePantry().meals`), or null when it follows its recipe. */
+export function mealOwnLines(meal: { planned_meal_lines?: { ingredient_id: string; qty_total: number | string | null }[] | null }): MealAmount[] | null {
+  const l = meal.planned_meal_lines
+  return l && l.length ? l.map((x) => ({ ingredientId: x.ingredient_id, qty: x.qty_total === null ? null : Number(x.qty_total) })) : null
+}
+
 // ---- Unread check-ins -----------------------------------------------------------------------------------------
 export type UnreadCheckin = {
   id: string

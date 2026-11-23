@@ -4,8 +4,8 @@ import { useMediaQuery } from '@mantine/hooks'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
-import { useIngredients, type Ingredient } from '../lib/api/ingredients.ts'
-import { createIngredientForRecipe, saveRecipe, type Recipe } from '../lib/api/recipes.ts'
+import { createIngredient, useIngredients, type Ingredient } from '../lib/api/ingredients.ts'
+import { saveRecipe, type Recipe } from '../lib/api/recipes.ts'
 import { useCommand } from '../lib/api/command.ts'
 
 type Unit = Ingredient['unit']
@@ -61,7 +61,7 @@ export default function RecipeForm({ recipe, onClose }: Props) {
   const ingredients = ingredientsQuery.data ?? []
   const unitOf = (id: string | null) => ingredients.find((i) => i.id === id)?.unit
 
-  const createIngredient = useCommand(createIngredientForRecipe)
+  const addIngredient = useCommand(createIngredient)
 
   const save = useCommand(saveRecipe, { onSuccess: onClose })
 
@@ -97,7 +97,7 @@ export default function RecipeForm({ recipe, onClose }: Props) {
     })
   }
 
-  const failure = save.error?.message ?? createIngredient.error?.message ?? ingredientsQuery.error?.message
+  const failure = save.error?.message ?? addIngredient.error?.message ?? ingredientsQuery.error?.message
 
   return (
     <GuardedModal dirty={dirty} onClose={onClose} title={recipe ? 'Edit recipe' : 'Add recipe'} fullScreen={isMobile}>
@@ -181,11 +181,11 @@ export default function RecipeForm({ recipe, onClose }: Props) {
                         <Group gap="xs">
                           <Button
                             size="xs"
-                            loading={createIngredient.isPending}
+                            loading={addIngredient.isPending}
                             onClick={() =>
-                              createIngredient.mutate({ name: q, unit: line.newUnit }, {
-                                onSuccess: (ingredient) => updateLine(line.key, {
-                                  ingredientId: ingredient.id,
+                              addIngredient.mutate({ name: q, unit: line.newUnit }, {
+                                onSuccess: (ingredientId) => updateLine(line.key, {
+                                  ingredientId,
                                   query: '',
                                   creating: false,
                                 }),

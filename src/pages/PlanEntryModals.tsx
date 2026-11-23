@@ -6,9 +6,9 @@ import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useCommand } from '../lib/api/command.ts'
-import { addMeal, moveMeal, saveSlots, setMealCook, setMealPortions } from '../lib/api/plan.ts'
+import { addMeal, moveMeal, setMealCook, setMealPortions } from '../lib/api/plan.ts'
 import { useRecipeOptions } from '../lib/api/recipes.ts'
-import { memberLabel, useMembers } from '../lib/members.ts'
+import { memberLabel, saveSlots, useMembers } from '../lib/api/household.ts'
 
 /** Reports a failed planner write. Every planner write uses it as its onError. */
 export const notifyFailure = (e: Error) => notifications.show({ color: 'red', title: 'Could not save', message: e.message })

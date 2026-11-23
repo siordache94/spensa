@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Modal, Stack, Text } from '@mantine/core'
 import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconChevronDown, IconFridge, IconSettings, IconShoppingCart } from '@tabler/icons-react'
 import { Link, NavLink, Route, Routes } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { isAuthApiError, type Session } from '@supabase/supabase-js'
+import { useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import { notifications } from '@mantine/notifications'
-import { supabase } from './lib/supabase.ts'
 import { useWaitingShopMutations } from './lib/offlineQueue.ts'
-import { useResyncSubscription } from './lib/push.ts'
+import { useCommand } from './lib/api/command.ts'
+import { useApi } from './lib/api/context.tsx'
+import { rotateInviteCode, useHouseholdRow, type HouseholdRow } from './lib/api/household.ts'
+import { signOut } from './lib/api/auth.ts'
+import { useResyncSubscription } from './lib/api/push.ts'
 import './shell.css'
 import AuthPage from './pages/AuthPage.tsx'
 import HouseholdPage from './pages/HouseholdPage.tsx'
@@ -18,7 +20,7 @@ import PantryPage from './pages/PantryPage.tsx'
 import ShopPage from './pages/ShopPage.tsx'
 import IngredientsPage from './pages/IngredientsPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
-import { useCheckinsSync, useUnreadCheckins } from './lib/checkins.ts'
+import { useCheckinsSync, useUnreadCheckins } from './lib/api/checkins.ts'
 
 const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/', label: 'Plan', end: true, icon: IconCalendarWeek },
@@ -49,35 +51,17 @@ function OfflineBadge() {
   return <span className="sp-offline" role="status">Offline — {waiting} waiting</span>
 }
 
-type Household = { id: string; name: string; invite_code: string }
-
-async function fetchHousehold(): Promise<Household | null> {
-  const { data, error } = await supabase.from('households').select('id, name, invite_code').maybeSingle()
-  if (error) throw error
-  return data
-}
-
-function HouseholdMenu({ household }: { household: Household }) {
+function HouseholdMenu({ household }: { household: HouseholdRow }) {
   const queryClient = useQueryClient()
   const inviteUrl = `${window.location.origin}/?invite=${household.invite_code}`
 
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const rotate = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc('rotate_invite_code')
-      if (error) throw error
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['household'] })
-      setConfirmOpen(false)
-    },
+  const rotate = useCommand(rotateInviteCode, {
+    onSuccess: () => setConfirmOpen(false),
     onError: (err) => notifications.show({ color: 'red', title: 'Could not change the invite code', message: err.message }),
   })
 
-  async function signOut() {
-    await supabase.auth.signOut()
-    queryClient.clear()
-  }
+  const leave = useCommand(signOut, { onSuccess: () => queryClient.clear() })
 
   async function shareLink() {
     try {
@@ -142,14 +126,14 @@ function HouseholdMenu({ household }: { household: Household }) {
         </Group>
         <Menu.Divider />
         <Menu.Item component={Link} to="/settings" leftSection={<IconSettings size={18} stroke={1.75} />}>Settings</Menu.Item>
-        <Menu.Item onClick={signOut}>Sign out</Menu.Item>
+        <Menu.Item onClick={() => leave.mutate()}>Sign out</Menu.Item>
       </Menu.Dropdown>
     </Menu>
     </>
   )
 }
 
-function Shell({ household }: { household: Household }) {
+function Shell({ household }: { household: HouseholdRow }) {
   useResyncSubscription()
   useCheckinsSync()
   const unreadMeals = useUnreadCheckins().count
@@ -204,7 +188,7 @@ function Shell({ household }: { household: Household }) {
 }
 
 function SignedIn() {
-  const { data: household, isPending, error } = useQuery({ queryKey: ['household'], queryFn: fetchHousehold })
+  const { data: household, isPending, error } = useHouseholdRow()
 
   if (isPending) return <Center h="100vh"><Loader /></Center>
   if (error) return <Alert color="red" m="md">{error.message}</Alert>
@@ -212,51 +196,35 @@ function SignedIn() {
   return <Shell household={household} />
 }
 
-const INVALID_USER_CODES = ['user_not_found', 'session_not_found', 'bad_jwt']
-
-// 'invalid' only when the server itself says the user/session is gone.
-// Anything else (network down, offline, unknown error) is 'unreachable'.
-async function verifyUser(): Promise<'ok' | 'invalid' | 'unreachable'> {
-  try {
-    const { data, error } = await supabase.auth.getUser()
-    if (!error && data.user) return 'ok'
-    const serverSaysGone = isAuthApiError(error) &&
-      ([401, 403, 404].includes(error.status) || INVALID_USER_CODES.includes(error.code ?? ''))
-    return serverSaysGone && navigator.onLine !== false ? 'invalid' : 'unreachable'
-  } catch {
-    return 'unreachable'
-  }
-}
-
 function App() {
+  const api = useApi()
   // undefined = session not yet known
-  const [session, setSession] = useState<Session | null | undefined>(undefined)
+  const [signedIn, setSignedIn] = useState<boolean | undefined>(undefined)
   const userChecked = useRef(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
-    return () => data.subscription.unsubscribe()
-  }, [])
+    void api.auth.session().then((session) => setSignedIn(session !== null))
+    return api.live.onSessionChange(setSignedIn)
+  }, [api])
 
   // A local DB reset leaves a JWT for a user that no longer exists. Verify once per load
   // in the background; only a server-side "this user/session is gone" answer signs out.
   // Network failures never sign out: retry once when the browser comes back online.
   useEffect(() => {
-    if (!session || userChecked.current) return
+    if (!signedIn || userChecked.current) return
     userChecked.current = true
-    verifyUser().then((result) => {
-      if (result === 'invalid') return supabase.auth.signOut()
+    void api.auth.verifyUser().then((result) => {
+      if (result === 'invalid') return api.auth.signOut('global')
       if (result === 'unreachable') {
         window.addEventListener('online', () => {
-          verifyUser().then((r) => { if (r === 'invalid') supabase.auth.signOut() })
+          void api.auth.verifyUser().then((r) => { if (r === 'invalid') void api.auth.signOut('global') })
         }, { once: true })
       }
     })
-  }, [session])
+  }, [api, signedIn])
 
-  if (session === undefined) return <Center h="100vh"><Loader /></Center>
-  if (!session) return <AuthPage />
+  if (signedIn === undefined) return <Center h="100vh"><Loader /></Center>
+  if (!signedIn) return <AuthPage />
   return <SignedIn />
 }
 

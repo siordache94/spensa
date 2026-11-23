@@ -1,6 +1,6 @@
 // Pantry aggregate: the raw facts for the Planner, Pantry and Shopping tabs, and what makes them stale.
 import { useMemo } from 'react'
-import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationOptions } from '@tanstack/react-query'
 import { buildEvents, buildIngredients, localDay } from '../../domain/pantryRows.ts'
 import type { PantryEdits } from '../../domain/pantryEdits.ts'
 import { expiringSoon, replay, stockByIngredient as stockOf, type Day } from '../../domain/replay.ts'
@@ -60,9 +60,6 @@ export function usePantryState() {
   )
   return { ...pantry, remaining, shortfalls: replayed?.shortfalls, consumed: replayed?.consumed, stockByIngredient, expiring }
 }
-
-/** For commands not yet migrated to defineCommand (`invalidates: () => [keys.pantry.all()]` is the target form). */
-export const invalidatePantry = (queryClient: QueryClient) => queryClient.invalidateQueries({ queryKey: keys.pantry.all() })
 
 /** The pantry editor's save: only the changed lines (see diffEdits). */
 export const savePantryEdits = defineCommand<PantryEdits>({

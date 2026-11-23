@@ -9,11 +9,16 @@ fakeAdapter.ts      in-memory adapter for tests (+ `row.*` factories)
 context.tsx         <ApiProvider api={...}> and useApi(); default = supabaseAdapter
 keys.ts             EVERY query key and mutation key
 command.ts          defineCommand / useCommand / runCommand (write + declared invalidations)
-<aggregate>.ts      ingredients.ts, pantry.ts, ... : hooks for reads, commands for writes
+<aggregate>.ts      ingredients.ts, pantry.ts, auth.ts, ... : hooks for reads, commands for writes
 ```
 
-Aggregates: ingredients, recipes, plan, shop, pantry, household, checkins, push, account. One file each.
+Aggregates: ingredients, recipes, plan, shop, pantry, household, checkins, push, account, auth. One file each.
+Not in this folder: `src/lib/storage.ts` (localStorage as JSON: `readJson` / `writeJson` / `removeKey`, every access guarded). Use it for any localStorage JSON, not `localStorage` directly.
+
 Done so far (worked examples): `ingredients.ts` (+ `IngredientsPage`, `IngredientForm`), `pantry.ts` (`usePantry`), the shop mutations in `src/lib/shopMutations.ts`.
+Migrated since: recipes and plan pages, check-ins, and the app shell and settings: `auth.ts` (`useMyId`, sign in / up / out), `household.ts` (settings, invite code, members, slots), `account.ts` (data export, delete account), `push.ts` (this device's subscription and prefs; the browser side stays in `src/lib/push.ts`).
+Still on the old way: `ShopPage` (its offline ticks use `useMutation({ mutationKey })` by design, see the section below) and `useQueryClient` calls in `ShopPage`.
+Supabase imports left outside the adapter: `src/lib/supabase.ts` (the client) and `supabaseAdapter.ts`. `main.tsx` imports the adapter (the boot code, registered before the cache is restored), not the client.
 
 ## Rules
 

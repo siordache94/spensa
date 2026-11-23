@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { runCommand } from './command.ts'
 import { createFakeAdapter, row } from './fakeAdapter.ts'
-import { addMeal, deleteMeal, moveMeal, saveSlots, setMealCook, setMealPortions } from './plan.ts'
+import { addMeal, deleteMeal, moveMeal, setMealCook, setMealPortions } from './plan.ts'
 import { keys } from './keys.ts'
 
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -69,20 +69,5 @@ describe('planner commands on the fake adapter', () => {
 
     await expect(runCommand(qc, api, moveMeal, { id: 'm1', to: { date: '2026-01-06', slot: 'lunch', position: 0 } })).rejects.toThrow()
     expect(stale(qc, keys.pantry.all())).toBe(false)
-  })
-
-  it('saveSlots writes the slots and invalidates household settings and the pantry', async () => {
-    const api = createFakeAdapter()
-    const qc = newClient()
-    await prime(qc, keys.household.settings(), {})
-    await prime(qc, keys.pantry.all(), {})
-    await prime(qc, keys.ingredients.all(), [])
-
-    await runCommand(qc, api, saveSlots, { slots: ['breakfast', 'dinner'] })
-
-    expect(api.state.household.slots).toEqual(['breakfast', 'dinner'])
-    expect(stale(qc, keys.household.settings())).toBe(true)
-    expect(stale(qc, keys.pantry.all())).toBe(true)
-    expect(stale(qc, keys.ingredients.all())).toBe(false)
   })
 })

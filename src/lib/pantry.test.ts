@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabase', () => ({ supabase: {} }))
-const { localDay } = await import('./pantry')
+const { localDay } = await import('./api/pantry')
 
 describe('localDay', () => {
   it('uses the household time zone, not UTC', () => {

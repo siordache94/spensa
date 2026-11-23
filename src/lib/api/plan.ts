@@ -37,10 +37,3 @@ export const deleteMeal = defineCommand<{ id: string }>({
   run: (api, { id }) => api.trash.softDelete('planned_meals', [id]),
   invalidates: refreshPlanner,
 })
-
-/** The meal slots, in day order. Same-day meal order depends on them, hence the pantry too. */
-export const saveSlots = defineCommand<{ slots: string[] }>({
-  name: 'plan.saveSlots',
-  run: (api, { slots }) => api.household.saveSlots(slots),
-  invalidates: () => [keys.household.settings(), keys.pantry.all()],
-})

@@ -5,10 +5,13 @@
 export const keys = {
   auth: {
     uid: () => ['auth', 'uid'] as const,
+    session: () => ['auth', 'session'] as const,
   },
   household: {
     /** Prefix: the household row, settings and members. */
     all: () => ['household'] as const,
+    /** The household row itself (same literal as `all`: the row is the root of the household keys). */
+    row: () => ['household'] as const,
     settings: () => ['household', 'settings'] as const,
     members: () => ['household', 'members'] as const,
     slotEndTimes: () => ['household', 'slot_end_times'] as const,
