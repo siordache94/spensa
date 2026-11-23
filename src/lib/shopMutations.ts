@@ -30,6 +30,7 @@ type Pantry = {
   events: { batches: { id: string; ingredientId: string; qty: number; addedOn: string; addedAt: string; expiresOn: string | null }[] }
   domainIngredients: { id: string; onHand: boolean }[]
   ingredients: { id: string; on_hand: boolean }[]
+  batchAuthors?: Record<string, string | null>
 }
 type Items = { id: string; checked: boolean }[]
 type Snapshot = [pantry: Pantry | undefined, items: Items | undefined]
@@ -80,15 +81,18 @@ export function registerShopMutations(qc: QueryClient) {
         .upsert({ id: b.batchId, ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn, added_at: b.addedAt }, { onConflict: 'id', ignoreDuplicates: true })
       if (error) throw new Error(error.message)
     },
-    onMutate: (b: Buy) =>
-      optimistic(qc, (p, items) => {
+    onMutate: async (b: Buy) => {
+      // The local session is read from storage, so this works offline.
+      const me = (await supabase.auth.getSession()).data.session?.user.id ?? null
+      return optimistic(qc, (p, items) => {
         const tz = qc.getQueryData<{ timezone: string }>(['household', 'settings'])?.timezone ?? 'UTC'
         const batch = { id: b.batchId, ingredientId: b.ingredientId, qty: b.qty, addedOn: localDay(b.addedAt, tz), addedAt: b.addedAt, expiresOn: b.expiresOn }
         return [
-          { ...p, events: { ...p.events, batches: [...p.events.batches, batch] } },
+          { ...p, events: { ...p.events, batches: [...p.events.batches, batch] }, batchAuthors: { ...p.batchAuthors, [b.batchId]: me } },
           b.shoppingItemId ? items?.filter((i) => i.id !== b.shoppingItemId) : undefined,
         ]
-      }),
+      })
+    },
     onError: (e: Error, _b: Buy, old: Snapshot | undefined) => {
       rollback(qc, old)
       fail(e)

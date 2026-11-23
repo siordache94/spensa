@@ -57,14 +57,14 @@ isOneToOne: false
                   ]
                 },"batches": {
                   Row: {
-                    "added_at": string,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number
+                    "added_at": string,"created_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "added_at"?: string,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number
+                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number
                   }
                   Update: {
-                    "added_at"?: string,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number
+                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number
                   }
                   Relationships: [
                     {
@@ -83,14 +83,14 @@ isOneToOne: false
                   ]
                 },"household_members": {
                   Row: {
-                    "household_id": string,"user_id": string
+                    "display_name": string | null,"household_id": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "household_id": string,"user_id": string
+                    "display_name"?: string | null,"household_id": string,"user_id": string
                   }
                   Update: {
-                    "household_id"?: string,"user_id"?: string
+                    "display_name"?: string | null,"household_id"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -137,14 +137,14 @@ isOneToOne: false
                   ]
                 },"planned_meals": {
                   Row: {
-                    "date": string,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"slot": string
+                    "cook_id": string | null,"date": string,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"slot": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "date": string,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"slot": string
+                    "cook_id"?: string | null,"date": string,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"slot": string
                   }
                   Update: {
-                    "date"?: string,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"slot"?: string
+                    "cook_id"?: string | null,"date"?: string,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"slot"?: string
                   }
                   Relationships: [
                     {
@@ -215,14 +215,14 @@ isOneToOne: false
                   ]
                 },"shopping_items": {
                   Row: {
-                    "checked": boolean,"created_at": string,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null
+                    "checked": boolean,"created_at": string,"created_by": string | null,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "checked"?: boolean,"created_at"?: string,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
                   }
                   Update: {
-                    "checked"?: boolean,"created_at"?: string,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
                   }
                   Relationships: [
                     {
@@ -301,10 +301,13 @@ isOneToOne: false
 { Args: { "expires_on": string,"item_id": string,"qty": number }; Returns: string
                            },
 "create_household":
-{ Args: { "name": string }; Returns: string
+{ Args: { "display_name"?: string,"name": string }; Returns: string
+                           },
+"default_member_name":
+{ Args: Record<PropertyKey, never>; Returns: string
                            },
 "join_household":
-{ Args: { "code": string }; Returns: string
+{ Args: { "code": string,"display_name"?: string }; Returns: string
                            },
 "my_household":
 { Args: Record<PropertyKey, never>; Returns: string

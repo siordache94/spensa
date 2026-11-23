@@ -1,0 +1,83 @@
+/* Shop: board columns shared by the list rows, column heads and category bands. */
+.sp-shop {
+  --c-tick: calc(var(--tick) + 16px);
+  --c-amt: calc(var(--amount-size) * 3);
+  --c-unit: 44px;
+  --c-pack: 60px;
+  --cols: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit) var(--c-pack);
+  font-variant-numeric: lining-nums; /* tabular figures widen commas and full stops in this face; only figures get them */
+  padding-bottom: 150px; /* clears the pinned dock above the tab bar */
+  margin-inline: calc(var(--mantine-spacing-md) * -1);
+}
+.sp-shop > .sp-pad { padding-inline: 16px; }
+.sp-title { font-family: inherit; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 0; color: var(--sp-text); }
+.sp-titlerow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px 0; }
+.sp-trip { font: 600 13px/1.2 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); padding: 4px 16px 10px; }
+.sp-note { font-size: 14px; line-height: 1.4; color: var(--sp-text2); padding: 4px 16px 12px; max-width: 65ch; }
+
+.sp-cols, .sp-row, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 16px 0 4px; }
+.sp-cols {
+  height: 24px; background: var(--sp-panel); border-block: 1px solid var(--sp-edge);
+  font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2);
+}
+.sp-cols > :nth-child(1) { grid-column: 2; }
+.sp-cols > :nth-child(2) { grid-column: 3; text-align: right; }
+.sp-cols > :nth-child(3) { grid-column: 5; }
+.sp-band {
+  min-height: 28px; margin-top: 12px; border-bottom: 1px solid var(--sp-edge);
+  font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
+}
+.sp-band > span { grid-column: 1 / 4; padding-left: 12px; }
+.sp-band > small { grid-column: 4 / 6; text-align: right; font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; color: var(--sp-text2); }
+.sp-band.sp-day { background: var(--sp-panel); border-block: 1px solid var(--sp-rule); margin-top: 0; }
+.sp-band.sp-day > span { grid-column: 1 / -1; }
+
+.sp-row { min-height: var(--row-h); border-bottom: 1px solid var(--sp-rule); position: relative; cursor: pointer; }
+.sp-row > .sp-tickcell { display: grid; place-items: center; min-height: var(--row-h); align-self: stretch; }
+.sp-name { font-size: var(--name-size); font-weight: 500; line-height: 1.2; color: var(--sp-text); text-align: left; padding: 6px 4px 6px 0; overflow-wrap: anywhere; }
+button.sp-name { background: none; border: 0; font-family: inherit; cursor: pointer; align-self: stretch; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.sp-name em { display: block; font-style: normal; font-size: 12px; font-weight: 500; color: var(--sp-accent); margin-top: 2px; }
+.sp-num { font-variant-numeric: tabular-nums lining-nums; text-align: right; font-size: var(--amount-size); font-weight: 600; line-height: 1; }
+.sp-unit { padding-left: 6px; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
+.sp-free { grid-column: 3 / 5; text-align: right; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
+.sp-pack { padding-left: 4px; font-size: 12px; line-height: 1.15; color: var(--sp-text2); }
+:root[data-spensa-density='airy'] .sp-unit { font-size: 16px; }
+:root[data-spensa-density='airy'] .sp-pack { font-size: 13px; }
+
+.sp-cart-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; margin-top: 12px; min-height: 44px; border-bottom: 1px solid var(--sp-edge); }
+.sp-cart-head > span { font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text); }
+.sp-row.sp-done .sp-name, .sp-row.sp-done .sp-num { color: var(--sp-text2); }
+.sp-row.sp-held { background: var(--mantine-primary-color-light); border: 1px solid var(--sp-yellow); }
+.sp-held .sp-name em { color: var(--sp-accent); }
+.sp-ack { position: absolute; inset: 0 0 0 var(--c-tick); background: none; border: 0; cursor: pointer; }
+
+.sp-add { padding: 4px 16px 8px; }
+.sp-empty { padding: 24px 16px; font-size: 16px; line-height: 1.4; max-width: 65ch; color: var(--sp-text); }
+.sp-finish { padding: 24px 16px 0; }
+
+/* Trip setup rows */
+.sp-meal { display: grid; grid-template-columns: var(--c-tick) 64px minmax(0, 1fr); align-items: center; padding: 0 16px 0 4px; min-height: var(--row-h); border-bottom: 1px solid var(--sp-rule); cursor: pointer; }
+.sp-meal .sp-slot { font: 600 12px/1 var(--sp-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-meal .sp-name b { font-weight: 600; color: var(--sp-text2); }
+.sp-more { padding: 12px 16px 0; }
+
+/* Dock: pinned above the tab bar on phones, bottom of the content column on wide screens. */
+.sp-dock {
+  position: fixed; z-index: 90; left: 8px; right: 8px; bottom: 68px;
+}
+@media (min-width: 48em) {
+  .sp-dock { left: 208px; right: 8px; bottom: 8px; max-width: 640px; }
+  .sp-shop { padding-bottom: 100px; }
+}
+.sp-pass {
+  display: grid; grid-template-columns: 0.8fr 0.9fr 1.5fr 1fr; min-height: 64px;
+  background: var(--sp-panel); border: 1px solid var(--sp-edge); border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.sp-seg-cell { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 8px 12px; border-left: 1px solid var(--sp-edge); min-width: 0; }
+.sp-seg-cell:first-child { border-left: 0; }
+.sp-seg-cell b { font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-seg-cell > span { font-variant-numeric: tabular-nums lining-nums; font-size: 19px; font-weight: 600; line-height: 1; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; color: var(--sp-text); overflow: hidden; }
+.sp-seg-cell small { font-size: 12px; font-weight: 400; color: var(--sp-text2); }
+.sp-seg-cell.sp-partner > span { color: var(--sp-accent); }
+.sp-seg-cell.sp-partner .sp-pname { overflow: hidden; text-overflow: ellipsis; }
+.sp-dock-btn { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }

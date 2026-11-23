@@ -76,7 +76,9 @@ async function fetchPantry(tz: string) {
     minStock: num(i.min_stock),
     onHand: i.on_hand,
   }))
-  return { events, domainIngredients, ingredients: ingredients.data!, meals: meals.data! }
+  // Who bought each batch (null = unknown), kept beside the domain events: the replay doesn't need it.
+  const batchAuthors: Record<string, string | null> = Object.fromEntries(batches.data!.map((b) => [b.id, b.created_by]))
+  return { events, domainIngredients, ingredients: ingredients.data!, meals: meals.data!, batchAuthors }
 }
 
 /** Raw facts for the Planner, Pantry and Shopping tabs. Derive stock with replay()/shoppingList() in a useMemo. */
@@ -94,6 +96,7 @@ export function usePantry() {
     ingredients: pantry.data?.ingredients,
     domainIngredients: pantry.data?.domainIngredients,
     meals: pantry.data?.meals,
+    batchAuthors: pantry.data?.batchAuthors,
   }
 }
 

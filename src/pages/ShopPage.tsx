@@ -1,35 +1,44 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, Title, UnstyledButton } from '@mantine/core'
+import { Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
-import type { Tables } from '../lib/database.types.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
-import { addDays, replay, shoppingList, type Need } from '../domain/replay.ts'
+import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
+import { useSettings } from '../lib/settings.ts'
+import { loadAcked, loadTrip, relativeTime, saveAcked, saveTrip, setupEnd, tripRange, type Trip } from '../lib/trip.ts'
+import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
+import './shop.css'
 
-type Unit = Tables<'ingredients'>['unit']
 
 // What the UI builds; ticking adds the batch id and time (see shopMutations.ts).
 type Buy = Omit<BuyVars, 'batchId' | 'addedAt'>
 
-// One row on the list. `buy` is set for rows with a quantity (tap the label to change it).
+// One row on the list. `buy` is set for rows with a quantity (tap the name to change it).
 type Entry = {
   key: string
   name: string
   category: string | null // null = uncategorised
-  detail: string | null
+  note?: string
+  figure?: string
+  unit?: string
+  free?: string // text in the amount column instead of a figure, e.g. "to taste"
+  pack?: string
   buy?: Buy
   onTick: () => void
 }
+
+type Meal = { id: string; date: Day; slot: string; portions: number; position: number; recipes: { name: string } | null }
 
 const withIds = (b: Buy): BuyVars => ({ ...b, batchId: crypto.randomUUID(), addedAt: new Date().toISOString() })
 const round1 = (n: number) => Math.round(n * 10) / 10
 const round3 = (n: number) => Math.round(n * 1000) / 1000
 const dayOf = (v: DateValue) => (v ? dayjs(v).format('YYYY-MM-DD') : null)
-const amount = (qty: number, unit: Unit) => (unit === 'count' ? `${round1(qty)}` : `${round1(qty)} ${unit}`)
+const packLabel = (packs: number | null) => (packs ? `≈ ${packs} ${packs === 1 ? 'pack' : 'packs'}` : undefined)
+const dayName = (d: Day) => dayjs(d).format('ddd D')
 
 function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean; onBuy: (b: Buy) => void; onClose: () => void }) {
   const [qty, setQty] = useState<number | string>(buy.qty)
@@ -72,10 +81,94 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
   )
 }
 
+function Tick({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
+  return (
+    <span className="sp-tickcell">
+      <Checkbox aria-label={label} checked={checked} onChange={onChange} />
+    </span>
+  )
+}
+
+function Figure({ figure, unit, free }: { figure?: string; unit?: string; free?: string }) {
+  if (free) return <span className="sp-free">{free}</span>
+  return (
+    <>
+      <b className="sp-num">{figure}</b>
+      <span className="sp-unit">{unit}</span>
+    </>
+  )
+}
+
+function Setup({ meals, slots, today, horizon, trip, onStart }: {
+  meals: Meal[]
+  slots: string[]
+  today: Day
+  horizon: number
+  trip: Trip | null
+  onStart: (mealIds: string[]) => void
+}) {
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    if (trip) return new Set(trip.mealIds)
+    const end = setupEnd(today, horizon, 0)
+    return new Set(meals.filter((m) => m.date >= today && m.date <= end).map((m) => m.id))
+  })
+  const [extra, setExtra] = useState(() => {
+    if (!trip) return 0
+    const last = meals.filter((m) => selected.has(m.id)).reduce((a, m) => (m.date > a ? m.date : a), today)
+    let w = 0
+    while (setupEnd(today, horizon, w) < last) w++
+    return w
+  })
+  const end = setupEnd(today, horizon, extra)
+  const rank = (slot: string) => { const i = slots.indexOf(slot); return i < 0 ? slots.length : i }
+  const shown = meals
+    .filter((m) => m.date >= today && m.date <= end)
+    .sort((a, b) => a.date.localeCompare(b.date) || rank(a.slot) - rank(b.slot) || a.position - b.position)
+  const days = [...new Set(shown.map((m) => m.date))]
+  const count = shown.filter((m) => selected.has(m.id)).length
+  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  return (
+    <div className="sp-shop">
+      <div className="sp-titlerow"><h1 className="sp-title">Plan this trip</h1></div>
+      <p className="sp-note">Staples below minimum stock and extras are always on the list.</p>
+
+      {shown.length === 0 && (
+        <p className="sp-empty">Nothing is planned for the next {extra * 7 + horizon} days. You can still shop for staples and extras.</p>
+      )}
+
+      {days.map((d) => (
+        <div key={d}>
+          <div className="sp-band sp-day"><span>{dayjs(d).format('ddd D MMM')}</span></div>
+          {shown.filter((m) => m.date === d).map((m) => (
+            <label key={m.id} className="sp-meal">
+              <Tick checked={selected.has(m.id)} label={`${m.slot} ${m.recipes?.name ?? 'meal'}`} onChange={() => toggle(m.id)} />
+              <span className="sp-slot">{m.slot}</span>
+              <span className="sp-name">{m.recipes?.name ?? 'No recipe'} <b>× {m.portions}</b></span>
+            </label>
+          ))}
+        </div>
+      ))}
+
+      <div className="sp-more">
+        <Button variant="default" size="md" fullWidth onClick={() => setExtra((e) => e + 1)}>Show 7 more days</Button>
+      </div>
+
+      <div className="sp-dock">
+        <Button className="sp-dock-btn" size="lg" fullWidth onClick={() => onStart([...selected].filter((id) => meals.some((m) => m.id === id)))}>
+          {trip ? 'Update trip' : 'Start shopping'} · {count} {count === 1 ? 'meal' : 'meals'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function ShopPage() {
   const queryClient = useQueryClient()
   const pantry = usePantry()
   const { events, domainIngredients, ingredients, today } = pantry
+  const [settings] = useSettings()
+  const waiting = useWaitingShopMutations()
 
   const items = useQuery({
     queryKey: ['shopping_items'],
@@ -104,19 +197,39 @@ export default function ShopPage() {
     }
   }, [queryClient])
 
-
-  const [days, setDays] = useState('7')
+  const [trip, setTrip] = useState<Trip | null>(loadTrip)
+  const [editing, setEditing] = useState(false)
+  const [acked, setAcked] = useState<string[]>(loadAcked)
+  const [me, setMe] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [tasted, setTasted] = useState<string[]>([]) // to-taste ingredients ticked this visit
   const [text, setText] = useState('')
   const [buying, setBuying] = useState<Buy | null>(null)
   const [snapshotOpen, setSnapshotOpen] = useState(false)
 
-  const from = today
-  const to = today ? addDays(today, Number(days) - 1) : undefined
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => setMe(data.session?.user.id ?? null))
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  const updateTrip = (t: Trip | null) => { setTrip(t); saveTrip(t) }
+
+  const mealIds = useMemo(() => new Set(trip?.mealIds ?? []), [trip])
+  const range = useMemo(() => {
+    if (!trip || !events) return null
+    const dates = events.meals.filter((m) => mealIds.has(m.id)).map((m) => m.date)
+    return { ...tripRange(trip.startedOn, dates), meals: dates.length, first: dates.reduce((a, d) => (d < a ? d : a), dates[0] ?? '') }
+  }, [trip, events, mealIds])
 
   const needs = useMemo<Need[]>(
-    () => (events && domainIngredients && from && to ? shoppingList(events, domainIngredients, from, to) : []),
-    [events, domainIngredients, from, to],
+    () => (events && domainIngredients && range ? shoppingList(events, domainIngredients, range.from, range.to, mealIds) : []),
+    [events, domainIngredients, range, mealIds],
+  )
+  // Staples below min stock: what the list would hold with no meals selected.
+  const stapleIds = useMemo(
+    () => new Set(events && domainIngredients && range ? shoppingList(events, domainIngredients, range.from, range.to, new Set()).map((n) => n.ingredientId) : []),
+    [events, domainIngredients, range],
   )
 
   const names = (ingredients ?? []).map((i) => i.name)
@@ -164,7 +277,7 @@ export default function ShopPage() {
       const { error } = await supabase.rpc('save_snapshot', { on_date: today, batches })
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => setSnapshotOpen(false),
+    onSuccess: () => { setSnapshotOpen(false); setEditing(false); updateTrip(null) },
     onSettled: () => invalidatePantry(queryClient),
     onError: showError,
   })
@@ -182,7 +295,7 @@ export default function ShopPage() {
       const ing = byId.get(n.ingredientId)
       if (!ing) continue
       if (n.qty === null) {
-        out.push({ key: `need-${n.ingredientId}`, name: ing.name, category: ing.category, detail: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
+        out.push({ key: `need-${n.ingredientId}`, name: ing.name, category: ing.category, free: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
         continue
       }
       const b: Buy = {
@@ -192,12 +305,14 @@ export default function ShopPage() {
         qty: round3(Math.max(n.qty, ing.pack_size ?? 0)),
         expiresOn: expiryFor(ing.shelf_life_days),
       }
-      const packs = n.packs ? ` ≈ ${n.packs} ${n.packs === 1 ? 'pack' : 'packs'}` : ''
       out.push({
         key: `need-${n.ingredientId}`,
         name: ing.name,
         category: ing.category,
-        detail: `${amount(n.qty, ing.unit)}${packs}`,
+        note: stapleIds.has(n.ingredientId) ? 'Staple, below min stock' : undefined,
+        figure: `${round1(n.qty)}`,
+        unit: ing.unit,
+        pack: packLabel(n.packs),
         buy: b,
         onTick: () => mutateBuy(withIds(b)),
       })
@@ -219,17 +334,18 @@ export default function ShopPage() {
           key: `item-${item.id}`,
           name: item.ingredients.name,
           category: item.ingredients.category,
-          detail: item.qty ? amount(item.qty, item.ingredients.unit) : null,
+          figure: item.qty ? `${round1(item.qty)}` : undefined,
+          unit: item.qty ? item.ingredients.unit : undefined,
           buy: b,
           onTick: () => mutateBuy(withIds(b)),
         })
       } else if (!item.checked) {
-        out.push({ key: `item-${item.id}`, name: item.text ?? '', category: null, detail: null, onTick: () => mutateCheck(item.id) })
+        out.push({ key: `item-${item.id}`, name: item.text ?? '', category: null, onTick: () => mutateCheck(item.id) })
       }
     }
 
     return out.sort((a, b) => a.name.localeCompare(b.name))
-  }, [ingredients, today, needs, items.data, mutateBuy, mutateOnHand, mutateCheck])
+  }, [ingredients, today, needs, stapleIds, items.data, mutateBuy, mutateOnHand, mutateCheck])
 
   const groups = useMemo(() => {
     const byCategory = new Map<string | null, Entry[]>()
@@ -243,22 +359,30 @@ export default function ShopPage() {
 
   const checkedTexts = (items.data ?? []).filter((i) => !i.ingredient_id && i.checked)
   const byId = new Map((ingredients ?? []).map((i) => [i.id, i]))
+  const authors = pantry.batchAuthors ?? {}
+  const todaysBatches = [...(events?.batches ?? [])]
+    .filter((b) => b.addedOn === today && byId.has(b.ingredientId))
+    .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+  const byPartner = (id: string) => !!me && !!authors[id] && authors[id] !== me
   const cart = [
-    ...(events?.batches ?? [])
-      .filter((b) => b.addedOn === today && byId.has(b.ingredientId))
-      .map((b) => {
-        const ing = byId.get(b.ingredientId)!
-        return { key: `batch-${b.id}`, label: `${ing.name} ${amount(b.qty, ing.unit)}`, untick: () => unbuy.mutate(b.id) }
-      }),
+    ...todaysBatches.map((b) => {
+      const ing = byId.get(b.ingredientId)!
+      const partner = byPartner(b.id)
+      return {
+        key: `batch-${b.id}`, id: b.id, name: ing.name, figure: `${round1(b.qty)}`, unit: ing.unit, free: undefined as string | undefined,
+        held: partner && !acked.includes(b.id), at: partner ? b.addedAt : undefined, untick: () => unbuy.mutate(b.id),
+      }
+    }),
     ...tasted
       .filter((id) => byId.get(id)?.on_hand)
-      .map((id) => ({ key: `taste-${id}`, label: `${byId.get(id)!.name} (to taste)`, untick: () => unOnHand.mutate(id) })),
-    ...checkedTexts.map((i) => ({ key: `text-${i.id}`, label: i.text ?? '', untick: () => uncheck.mutate(i.id) })),
+      .map((id) => ({ key: `taste-${id}`, id, name: byId.get(id)!.name, figure: undefined, unit: undefined, free: 'to taste', held: false, at: undefined, untick: () => unOnHand.mutate(id) })),
+    ...checkedTexts.map((i) => ({ key: `text-${i.id}`, id: i.id, name: i.text ?? '', figure: undefined, unit: undefined, free: undefined, held: false, at: undefined, untick: () => uncheck.mutate(i.id) })),
   ]
+  const lastPartner = todaysBatches.find((b) => byPartner(b.id))
   const failure = pantry.error ?? items.error
 
   if (failure) return <Alert color="red">{failure.message}</Alert>
-  if (pantry.isPending || items.isPending) return <Center py="xl"><Loader /></Center>
+  if (pantry.isPending || items.isPending || !today) return <Center py="xl"><Loader /></Center>
 
   function submitItem(e: FormEvent) {
     e.preventDefault()
@@ -266,79 +390,117 @@ export default function ShopPage() {
     if (value) addItem.mutate(value)
   }
 
+  function acknowledge(id: string) {
+    const next = [...acked, id]
+    setAcked(next)
+    saveAcked(next)
+  }
+
+  if (!trip || editing || !range) {
+    return (
+      <Setup
+        meals={(pantry.meals ?? []) as Meal[]}
+        slots={pantry.household?.slots ?? []}
+        today={today}
+        horizon={settings.horizonDays}
+        trip={trip}
+        onStart={(ids) => { updateTrip({ mealIds: ids, startedOn: trip?.startedOn ?? today }); setEditing(false) }}
+      />
+    )
+  }
+
+  const summary = range.meals === 0
+    ? 'Staples and extras only'
+    : `${range.first === range.to ? dayjs(range.to).format('ddd D') : `${dayName(range.first)} – ${dayName(range.to)}`} · ${range.meals} ${range.meals === 1 ? 'meal' : 'meals'}`
+
   return (
-    <Stack>
-      <Title order={2}>Shop</Title>
+    <div className="sp-shop">
+      <div className="sp-titlerow">
+        <h1 className="sp-title">Shopping list</h1>
+        <Button variant="default" size="sm" onClick={() => setEditing(true)}>Edit trip</Button>
+      </div>
+      <div className="sp-trip">{summary}</div>
 
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>Buy for</Text>
-        <SegmentedControl
-          size="md"
-          fullWidth
-          value={days}
-          onChange={setDays}
-          data={[{ value: '3', label: '3 days' }, { value: '7', label: '1 week' }, { value: '14', label: '2 weeks' }]}
-        />
-        {to && <Text size="xs" c="dimmed">until {dayjs(to).format('ddd D MMM')}</Text>}
-      </Stack>
-
-      <form onSubmit={submitItem}>
+      <form className="sp-add" onSubmit={submitItem}>
         <Group wrap="nowrap" align="flex-end">
-          <Autocomplete
-            flex={1}
-            size="lg"
-            placeholder="Add an item"
-            value={text}
-            onChange={setText}
-            data={names}
-          />
-          <Button type="submit" size="lg" loading={addItem.isPending} disabled={text.trim() === ''}>
+          <Autocomplete flex={1} size="md" placeholder="Add an item" aria-label="Add an item" value={text} onChange={setText} data={names} />
+          <Button type="submit" size="md" loading={addItem.isPending} disabled={text.trim() === ''}>
             Add
           </Button>
         </Group>
       </form>
 
-      {entries.length === 0 && <Text>Nothing to buy for these days.</Text>}
+      <div className="sp-cols" aria-hidden="true"><span>Item</span><span>Amount</span><span>Pack</span></div>
+
+      {entries.length === 0 && <p className="sp-empty">Nothing left to buy for this trip.</p>}
 
       {groups.map(([category, rows]) => (
-        <Stack key={category ?? 'uncategorised'} gap={0}>
-          <Text fw={700} size="sm" tt="uppercase" c="dimmed" mt="md">
-            {category ?? 'Uncategorised'}
-          </Text>
+        <div key={category ?? 'uncategorised'}>
+          <div className="sp-band"><span>{category ?? 'Other'}</span><small>{rows.length} to buy</small></div>
           {rows.map((e) => (
-            <Group key={e.key} wrap="nowrap" gap="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-              <Checkbox size="xl" aria-label={`Bought ${e.name}`} checked={false} onChange={() => e.onTick()} />
-              <UnstyledButton flex={1} style={{ textAlign: 'left' }} onClick={() => e.buy && setBuying(e.buy)}>
-                <Text fw={500} size="lg">{e.name}</Text>
-                {e.detail && <Text size="sm" c="dimmed">{e.detail}</Text>}
-              </UnstyledButton>
-            </Group>
+            <label key={e.key} className="sp-row">
+              <Tick checked={false} label={`Bought ${e.name}`} onChange={() => e.onTick()} />
+              {e.buy ? (
+                <button type="button" className="sp-name" aria-label={`Change amount for ${e.name}`} onClick={(ev) => { ev.preventDefault(); setBuying(e.buy!) }}>
+                  {e.name}
+                  {e.note && <em>{e.note}</em>}
+                </button>
+              ) : (
+                <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}</span>
+              )}
+              <Figure figure={e.figure} unit={e.unit} free={e.free} />
+              <span className="sp-pack">{e.pack}</span>
+            </label>
           ))}
-        </Stack>
+        </div>
       ))}
 
       {cart.length > 0 && (
-        <Stack gap={0} mt="md">
-          <Group justify="space-between">
-            <Text fw={700} size="sm" tt="uppercase" c="dimmed">In the cart</Text>
+        <div>
+          <div className="sp-cart-head">
+            <span>In the cart · {cart.length}</span>
             {checkedTexts.length > 0 && (
               <Button variant="subtle" loading={clearChecked.isPending} onClick={() => clearChecked.mutate()}>
                 Clear checked
               </Button>
             )}
-          </Group>
+          </div>
           {cart.map((c) => (
-            <Group key={c.key} wrap="nowrap" gap="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-              <Checkbox size="xl" aria-label={`Put back ${c.label}`} checked onChange={() => c.untick()} />
-              <Text size="lg" c="dimmed">{c.label}</Text>
-            </Group>
+            <div key={c.key} className={`sp-row sp-done${c.held ? ' sp-held' : ''}`} style={{ cursor: 'default' }}>
+              <Tick checked label={`Put back ${c.name}`} onChange={() => c.untick()} />
+              <span className="sp-name">
+                {c.name}
+                {c.held && c.at && <em>ticked by partner · {relativeTime(c.at, now)}</em>}
+              </span>
+              <Figure figure={c.figure} unit={c.unit} free={c.free} />
+              <span className="sp-pack" />
+              {c.held && <button type="button" className="sp-ack" aria-label={`Acknowledge ${c.name}, ticked by partner`} onClick={() => acknowledge(c.id)} />}
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
 
-      <Button size="lg" fullWidth mt="xl" variant="light" disabled={!events} onClick={() => setSnapshotOpen(true)}>
-        Done shopping
-      </Button>
+      <div className="sp-finish">
+        <Button size="lg" fullWidth variant="default" disabled={!events} onClick={() => setSnapshotOpen(true)}>
+          Done shopping
+        </Button>
+      </div>
+
+      <div className="sp-dock">
+        <div className="sp-pass" role="group" aria-label="Trip status">
+          <div className="sp-seg-cell"><b>Left</b><span>{entries.length}</span></div>
+          <div className="sp-seg-cell"><b>In cart</b><span>{cart.length}</span></div>
+          <div className="sp-seg-cell sp-partner">
+            <b>Partner</b>
+            {lastPartner ? (
+              <span><span className="sp-pname">{byId.get(lastPartner.ingredientId)?.name}</span> <small>{relativeTime(lastPartner.addedAt, now)}</small></span>
+            ) : (
+              <span>—</span>
+            )}
+          </div>
+          <div className="sp-seg-cell"><b>Queue</b><span>{waiting === 0 ? <span style={{ fontSize: 15 }}>synced</span> : waiting}</span></div>
+        </div>
+      </div>
 
       {buying && (
         <BuyModal key={buying.shoppingItemId ?? buying.ingredientId} buy={buying} pending={false} onBuy={(b) => { mutateBuy(withIds(b)); setBuying(null) }} onClose={() => setBuying(null)} />
@@ -355,6 +517,6 @@ export default function ShopPage() {
           </Button>
         </Stack>
       </Modal>
-    </Stack>
+    </div>
   )
 }
