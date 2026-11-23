@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { usePantry } from '../lib/pantry.ts'
-import { supabase } from '../lib/supabase.ts'
-import { softDelete } from '../lib/softDelete.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { addMeal, deleteMeal, moveMeal, setMealCook } from '../lib/api/plan.ts'
 import { addDays, replay } from '../domain/replay.ts'
 import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
 import { parseCheckinParams, useUnreadCheckins } from '../lib/checkins.ts'
 import UseSoon from './UseSoon.tsx'
 import NotifyPrompt from '../components/NotifyPrompt.tsx'
 import './plan.css'
-import { CookModal, MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
+import { CookModal, MealModal, MoveCopyModal, notifyFailure, SlotsModal, type Target } from './PlanEntryModals.tsx'
 import { AmountsModal, CheckinSheet, checkinFailure, useCheckinActions } from './CheckinModals.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
@@ -36,7 +36,10 @@ export default function PlanPage() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
-  const move = useWrite()
+  const move = useCommand(moveMeal, { onError: notifyFailure })
+  const copy = useCommand(addMeal, { onError: notifyFailure })
+  const setCook = useCommand(setMealCook, { onError: notifyFailure })
+  const remove = useCommand(deleteMeal, { onError: notifyFailure })
   const me = useMyId()
   const members = useMembers().data
   const unread = useUnreadCheckins()
@@ -106,11 +109,8 @@ export default function PlanPage() {
     const meal = meals.find((m) => m.id === e.dataTransfer.getData('text/plain'))
     if (!meal || (meal.date === t.date && meal.slot === t.slot && !e.altKey)) return
     const to = { ...t, position: nextPosition(t) }
-    move.mutate(
-      e.altKey
-        ? supabase.from('planned_meals').insert({ ...to, recipe_id: meal.recipe_id, portions: meal.portions })
-        : supabase.from('planned_meals').update(to).eq('id', meal.id),
-    )
+    if (e.altKey) copy.mutate({ ...to, recipe_id: meal.recipe_id, portions: meal.portions })
+    else move.mutate({ id: meal.id, to })
   }
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
@@ -183,7 +183,7 @@ export default function PlanPage() {
                           </Menu.Target>
                           <Menu.Dropdown>
                             {me && (
-                              <Menu.Item onClick={() => move.mutate(supabase.from('planned_meals').update({ cook_id: m.cook_id === me ? null : me }).eq('id', m.id))}>
+                              <Menu.Item onClick={() => setCook.mutate({ id: m.id, cookId: m.cook_id === me ? null : me })}>
                                 {m.cook_id === me ? "I won't cook" : "I'll cook"}
                               </Menu.Item>
                             )}
@@ -195,7 +195,7 @@ export default function PlanPage() {
                             </Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
-                            <Menu.Item color="red" onClick={() => move.mutate(softDelete('planned_meals', [m.id]))}>Delete</Menu.Item>
+                            <Menu.Item color="red" onClick={() => remove.mutate({ id: m.id })}>Delete</Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
                       )

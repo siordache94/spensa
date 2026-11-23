@@ -31,6 +31,26 @@ export type SoftTable =
 
 export type HouseholdSettings = Pick<Tables<'households'>, 'id' | 'timezone' | 'expiring_days' | 'horizon_days' | 'slots' | 'slot_end_times'>
 
+export type Recipe = Tables<'recipes'> & {
+  recipe_ingredients: {
+    ingredient_id: string
+    qty_per_portion: number | null // null = to taste
+    ingredients: { name: string; unit: Tables<'ingredients'>['unit'] }
+  }[]
+}
+export type RecipeOption = Pick<Tables<'recipes'>, 'id' | 'name' | 'serves'>
+/** What the recipe form saves. `id` null = a new recipe. `lines` are per portion; qty_per_portion null = to taste. */
+export type RecipeSave = {
+  id: string | null
+  name: string
+  instructions: string
+  tags: string[]
+  serves: number
+  lines: { ingredient_id: string; qty_per_portion: number | null }[]
+}
+export type PlannedMeal = Tables<'planned_meals'>
+export type PlannedMealInput = TablesInsert<'planned_meals'>
+
 export type PantryMealRow = Tables<'planned_meals'> & {
   planned_meal_lines: { ingredient_id: string; qty_total: number | string | null }[]
   recipes: { id: string; name: string; recipe_ingredients: { ingredient_id: string; qty_per_portion: number | string | null }[] } | null
@@ -66,6 +86,27 @@ export interface DataPort {
   }
   household: {
     settings(): Promise<HouseholdSettings>
+    /** The meal slots, in day order. */
+    saveSlots(slots: string[]): Promise<void>
+  }
+  recipes: {
+    list(): Promise<Recipe[]>
+    /** Id, name and serves of every live recipe, for the planner's recipe picker. */
+    options(): Promise<RecipeOption[]>
+    /** Planned meals of one recipe after the latest snapshot (all of them when there is none). */
+    planned(recipeId: string): Promise<PlannedMeal[]>
+    /** Throws ApiError with the server code when the RPC refuses. */
+    save(input: RecipeSave): Promise<void>
+    /** Adds an ingredient from the recipe form's inline picker. Throws ApiError code 23505 when the name is taken. */
+    createIngredient(row: Pick<IngredientInput, 'name' | 'unit'>): Promise<Ingredient>
+  }
+  plan: {
+    /** Adds a planned meal (a copy, or a new one from the planner). */
+    add(row: PlannedMealInput): Promise<void>
+    move(id: string, to: { date: string; slot: string; position: number }): Promise<void>
+    setPortions(id: string, portions: number): Promise<void>
+    /** null = nobody cooks it. */
+    setCook(id: string, cookId: string | null): Promise<void>
   }
   ingredients: {
     list(): Promise<Ingredient[]>

@@ -2,7 +2,7 @@
 // It mirrors the server rules the app relies on (soft delete hides rows, unique names, FK-style delete guard),
 // not the SQL. Add behaviour here only when a test needs it, and keep it as dumb as the real thing is smart.
 import type { Tables } from '../database.types.ts'
-import { ApiError, type DataPort, type HouseholdSettings, type PantryMealRow, type PantrySnapshotRow } from './port.ts'
+import { ApiError, type DataPort, type HouseholdSettings, type PantryMealRow, type PantrySnapshotRow, type Recipe } from './port.ts'
 
 export type FakeState = {
   userId: string | null
@@ -15,6 +15,7 @@ export type FakeState = {
   adjustments: Tables<'adjustments'>[]
   snapshot: PantrySnapshotRow | undefined
   shoppingItems: Tables<'shopping_items'>[]
+  recipes: Recipe[]
 }
 
 export type FakeApi = DataPort & {
@@ -43,13 +44,22 @@ export const row = {
     bought_batch_id: null, checked: false, created_at: NOW, created_by: null, deleted_at: null, deleted_by: null, household_id: 'h1', id: id(),
     ingredient_id: null, qty: null, text: null, updated_at: null, updated_by: null, ...o,
   }),
+  recipe: (o: Partial<Tables<'recipes'>> & { recipe_ingredients?: Recipe['recipe_ingredients'] } = {}): Recipe => ({
+    created_at: NOW, created_by: null, deleted_at: null, deleted_by: null, household_id: 'h1', id: id(), instructions: '', name: 'soup',
+    serves: 2, tags: [], updated_at: null, updated_by: null, recipe_ingredients: [], ...o,
+  }),
+  plannedMeal: (o: Partial<Tables<'planned_meals'>> = {}): PantryMealRow => ({
+    cook_id: null, created_at: NOW, created_by: null, date: '2026-01-05', deleted_at: null, deleted_by: null, household_id: 'h1', id: id(),
+    not_cooked: false, portions: 2, position: 0, recipe_id: null, skip_shopping: false, slot: 'dinner', updated_at: null, updated_by: null,
+    planned_meal_lines: [], recipes: null, ...o,
+  }),
 }
 
 export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
   const state: FakeState = {
     userId: 'u1',
     household: { id: 'h1', timezone: 'UTC', expiring_days: 3, horizon_days: 7, slots: ['lunch', 'dinner'], slot_end_times: {} },
-    ingredients: [], recipeLines: [], batches: [], meals: [], adjustments: [], snapshot: undefined, shoppingItems: [],
+    ingredients: [], recipeLines: [], batches: [], meals: [], adjustments: [], snapshot: undefined, shoppingItems: [], recipes: [],
     ...seed,
   }
   const calls: string[] = []
@@ -74,9 +84,66 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
 
   const live = <T extends { deleted_at: string | null }>(rows: T[]) => rows.filter((r) => !r.deleted_at)
 
+  /** `recipeLines` is what usage and the ingredient delete guard read. Keeps it in step with a recipe. Matches by name (shortcut). */
+  const syncRecipeLines = (recipe: Recipe, previousName = recipe.name) => {
+    state.recipeLines = state.recipeLines.filter((l) => l.recipeName !== previousName)
+    if (!recipe.deleted_at) {
+      state.recipeLines.push(...recipe.recipe_ingredients.map((ri) => ({ ingredientId: ri.ingredient_id, recipeName: recipe.name })))
+    }
+  }
+
   const api: DataPort = {
     auth: track('auth', { currentUserId: () => state.userId }),
-    household: track('household', { settings: () => state.household }),
+    household: track('household', {
+      settings: () => state.household,
+      saveSlots: (slots) => { state.household.slots = slots },
+    }),
+    recipes: track('recipes', {
+      list: () => [...live(state.recipes)].sort((a, b) => a.name.localeCompare(b.name)),
+      options: () => [...live(state.recipes)].sort((a, b) => a.name.localeCompare(b.name)).map((r) => ({ id: r.id, name: r.name, serves: r.serves })),
+      planned: (recipeId) => {
+        const cutoff = state.snapshot?.on_date
+        return live(state.meals)
+          .filter((m) => m.recipe_id === recipeId && (!cutoff || m.date > cutoff))
+          .sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot))
+      },
+      save: (input) => {
+        const lines = input.lines.map((l) => {
+          const ing = state.ingredients.find((i) => i.id === l.ingredient_id)
+          return { ingredient_id: l.ingredient_id, qty_per_portion: l.qty_per_portion, ingredients: { name: ing?.name ?? '', unit: ing?.unit ?? 'g' } }
+        })
+        const existing = input.id ? state.recipes.find((r) => r.id === input.id) : undefined
+        const previousName = existing?.name
+        const target = existing ?? row.recipe({ name: input.name })
+        Object.assign(target, { name: input.name, instructions: input.instructions, tags: input.tags, serves: input.serves, recipe_ingredients: lines })
+        if (!existing) state.recipes.push(target)
+        // shortcut: no unique-name check on recipes (the real RPC's rules are not known to the fake)
+        syncRecipeLines(target, previousName)
+      },
+      createIngredient: (input) => {
+        if (live(state.ingredients).some((i) => i.name.toLowerCase() === input.name.toLowerCase())) {
+          throw new ApiError('duplicate key value violates unique constraint', '23505')
+        }
+        const created = row.ingredient({ name: input.name, unit: input.unit })
+        state.ingredients.push(created)
+        return created
+      },
+    }),
+    plan: track('plan', {
+      add: (input) => { state.meals.push(row.plannedMeal(input)) },
+      move: (id, to) => {
+        const m = state.meals.find((x) => x.id === id)
+        if (m) Object.assign(m, to)
+      },
+      setPortions: (id, portions) => {
+        const m = state.meals.find((x) => x.id === id)
+        if (m) m.portions = portions
+      },
+      setCook: (id, cookId) => {
+        const m = state.meals.find((x) => x.id === id)
+        if (m) m.cook_id = cookId
+      },
+    }),
     ingredients: track('ingredients', {
       list: () => [...live(state.ingredients)].sort((a, b) => a.name.localeCompare(b.name)),
       usage: (ingredientId) => state.recipeLines.filter((l) => l.ingredientId === ingredientId).map((l) => l.recipeName),
@@ -128,10 +195,20 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
           }
           for (const i of state.ingredients) if (ids.includes(i.id)) i.deleted_at = NOW
         }
-        // shortcut: other tables are not faked yet; add them with the first test that needs them
+        if (table === 'recipes') {
+          // a live planned meal still points at the recipe: the FK refuses, as in the database
+          for (const id of ids) {
+            if (live(state.meals).some((m) => m.recipe_id === id)) throw new ApiError('still referenced', '23503')
+          }
+          for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = NOW; syncRecipeLines(r) }
+        }
+        if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = NOW
+        // shortcut: the other tables are not faked yet; add them with the first test that needs them
       },
       restore: (table, ids) => {
         if (table === 'ingredients') for (const i of state.ingredients) if (ids.includes(i.id)) i.deleted_at = null
+        if (table === 'recipes') for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = null; syncRecipeLines(r) }
+        if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = null
       },
     }),
   }

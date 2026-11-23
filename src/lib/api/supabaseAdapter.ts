@@ -6,6 +6,8 @@ const check = (error: { message: string; code?: string } | null) => {
   if (error) throw new ApiError(error.message, error.code)
 }
 
+const RECIPE_SELECT = '*, recipe_ingredients(ingredient_id, qty_per_portion, ingredients(name, unit))'
+
 export const supabaseAdapter: DataPort = {
   auth: {
     // The local session is read from storage, so this works offline.
@@ -17,6 +19,75 @@ export const supabaseAdapter: DataPort = {
       const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots, slot_end_times').single()
       check(error)
       return data!
+    },
+    async saveSlots(slots) {
+      // household_id is not needed: RLS limits the update to the member's own household row
+      const { error } = await supabase.from('households').update({ slots }).not('id', 'is', null)
+      check(error)
+    },
+  },
+
+  recipes: {
+    async list() {
+      const { data, error } = await supabase.from('recipes').select(RECIPE_SELECT).order('name')
+      check(error)
+      return data!
+    },
+    async options() {
+      const { data, error } = await supabase.from('recipes').select('id, name, serves').order('name')
+      check(error)
+      return data!
+    },
+    async planned(recipeId) {
+      const { data: snapshots, error: snapshotError } = await supabase
+        .from('snapshots')
+        .select('on_date')
+        .order('on_date', { ascending: false })
+        .limit(1)
+      check(snapshotError)
+      const cutoff = snapshots![0]?.on_date
+
+      let query = supabase.from('planned_meals').select('*').eq('recipe_id', recipeId).order('date').order('slot')
+      if (cutoff) query = query.gt('date', cutoff)
+      const { data, error } = await query
+      check(error)
+      return data!
+    },
+    async save(input) {
+      const { error } = await supabase.rpc('save_recipe', {
+        // Generated types omit null for uuid args; the RPC takes null to mean "insert".
+        recipe_id: (input.id ?? null) as string,
+        name: input.name,
+        instructions: input.instructions,
+        tags: input.tags,
+        serves: input.serves,
+        lines: input.lines,
+      })
+      check(error)
+    },
+    async createIngredient(row) {
+      const { data, error } = await supabase.from('ingredients').insert({ name: row.name, unit: row.unit }).select().single()
+      check(error)
+      return data!
+    },
+  },
+
+  plan: {
+    async add(row) {
+      const { error } = await supabase.from('planned_meals').insert(row)
+      check(error)
+    },
+    async move(id, to) {
+      const { error } = await supabase.from('planned_meals').update(to).eq('id', id)
+      check(error)
+    },
+    async setPortions(id, portions) {
+      const { error } = await supabase.from('planned_meals').update({ portions }).eq('id', id)
+      check(error)
+    },
+    async setCook(id, cookId) {
+      const { error } = await supabase.from('planned_meals').update({ cook_id: cookId }).eq('id', id)
+      check(error)
     },
   },
 

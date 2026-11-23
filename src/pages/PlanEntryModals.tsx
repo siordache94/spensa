@@ -5,26 +5,13 @@ import { useMediaQuery } from '@mantine/hooks'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { invalidatePantry } from '../lib/pantry.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { addMeal, moveMeal, saveSlots, setMealCook, setMealPortions } from '../lib/api/plan.ts'
+import { useRecipeOptions } from '../lib/api/recipes.ts'
 import { memberLabel, useMembers } from '../lib/members.ts'
-import { supabase } from '../lib/supabase.ts'
 
-/** Runs a Supabase write, refreshes the pantry, reports failures in a notification. */
-export function useWrite(onDone?: () => void) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (write: PromiseLike<{ error: { message: string } | null }>) => {
-      const { error } = await write
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      invalidatePantry(queryClient)
-      onDone?.()
-    },
-    onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }),
-  })
-}
+/** Reports a failed planner write. Every planner write uses it as its onError. */
+export const notifyFailure = (e: Error) => notifications.show({ color: 'red', title: 'Could not save', message: e.message })
 
 const isPortions = (v: number | null): v is number => v !== null && Number.isInteger(v) && v >= 1
 
@@ -46,27 +33,16 @@ export function MealModal({
   const [recipeId, setRecipeId] = useState<string | null>(null)
   const [portions, setPortions] = useState<number | null>(meal?.portions ?? 2)
   const dirty = useDirty({ recipeId, portions })
-  const write = useWrite(onClose)
+  const add = useCommand(addMeal, { onSuccess: onClose, onError: notifyFailure })
+  const changePortions = useCommand(setMealPortions, { onSuccess: onClose, onError: notifyFailure })
 
-  const recipes = useQuery({
-    queryKey: ['recipes', 'options'],
-    enabled: !meal,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('recipes').select('id, name, serves').order('name')
-      if (error) throw error
-      return data
-    },
-  })
+  const recipes = useRecipeOptions(!meal)
 
   const canSave = isPortions(portions) && (!!meal || !!recipeId)
   const save = () => {
     if (!isPortions(portions)) return
-    if (meal) write.mutate(supabase.from('planned_meals').update({ portions }).eq('id', meal.id))
-    else if (recipeId) {
-      write.mutate(
-        supabase.from('planned_meals').insert({ ...target, recipe_id: recipeId, portions, position }),
-      )
-    }
+    if (meal) changePortions.mutate({ id: meal.id, portions })
+    else if (recipeId) add.mutate({ ...target, recipe_id: recipeId, portions, position })
   }
 
   return (
@@ -98,7 +74,7 @@ export function MealModal({
           onChange={setPortions}
           error={isPortions(portions) ? undefined : 'Whole number, 1 or more'}
         />
-        <Button disabled={!canSave} loading={write.isPending} onClick={save}>Save</Button>
+        <Button disabled={!canSave} loading={add.isPending || changePortions.isPending} onClick={save}>Save</Button>
       </Stack>
     </GuardedModal>
   )
@@ -122,16 +98,14 @@ export function MoveCopyModal({
   const [date, setDate] = useState<string | null>(meal.date)
   const [slot, setSlot] = useState<string | null>(meal.slot)
   const dirty = useDirty({ date, slot })
-  const write = useWrite(onClose)
+  const move = useCommand(moveMeal, { onSuccess: onClose, onError: notifyFailure })
+  const copy = useCommand(addMeal, { onSuccess: onClose, onError: notifyFailure })
 
   const save = () => {
     if (!date || !slot) return
     const to = { date, slot, position: position({ date, slot }) }
-    write.mutate(
-      mode === 'move'
-        ? supabase.from('planned_meals').update(to).eq('id', meal.id)
-        : supabase.from('planned_meals').insert({ ...to, recipe_id: meal.recipe_id, portions: meal.portions }),
-    )
+    if (mode === 'move') move.mutate({ id: meal.id, to })
+    else copy.mutate({ ...to, recipe_id: meal.recipe_id, portions: meal.portions })
   }
 
   return (
@@ -141,7 +115,7 @@ export function MoveCopyModal({
         <Input.Wrapper label="Slot">
           <SegmentedControl fullWidth orientation={slots.length > 3 ? 'vertical' : 'horizontal'} data={slots.includes(meal.slot) ? slots : [...slots, meal.slot]} value={slot ?? ''} onChange={setSlot} />
         </Input.Wrapper>
-        <Button disabled={!date || !slot} loading={write.isPending} onClick={save}>
+        <Button disabled={!date || !slot} loading={move.isPending || copy.isPending} onClick={save}>
           {mode === 'move' ? 'Move' : 'Copy'}
         </Button>
       </Stack>
@@ -150,15 +124,10 @@ export function MoveCopyModal({
 }
 
 export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () => void }) {
-  const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [value, setValue] = useState(slots)
   const dirty = useDirty(value)
-  const write = useWrite(() => {
-    queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
-    queryClient.invalidateQueries({ queryKey: ['pantry'] }) // same-day meal order depends on the slots
-    onClose()
-  })
+  const write = useCommand(saveSlots, { onSuccess: onClose, onError: notifyFailure })
   const clean = [...new Set(value.map((s) => s.trim()).filter(Boolean))]
 
   return (
@@ -169,8 +138,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
         <Button
           disabled={clean.length === 0}
           loading={write.isPending}
-          // household_id is not needed: RLS limits the update to the member's own household row
-          onClick={() => write.mutate(supabase.from('households').update({ slots: clean }).not('id', 'is', null))}
+          onClick={() => write.mutate({ slots: clean })}
         >
           Save
         </Button>
@@ -185,7 +153,7 @@ export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: stri
   const members = useMembers()
   const [cook, setCook] = useState(meal.cook_id ?? '')
   const dirty = useDirty(cook)
-  const write = useWrite(onClose)
+  const write = useCommand(setMealCook, { onSuccess: onClose, onError: notifyFailure })
   return (
     <GuardedModal dirty={dirty} onClose={onClose} title="Who cooks?" fullScreen={isMobile}>
       <Stack>
@@ -202,7 +170,7 @@ export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: stri
         )}
         <Button
           loading={write.isPending}
-          onClick={() => write.mutate(supabase.from('planned_meals').update({ cook_id: cook || null }).eq('id', meal.id))}
+          onClick={() => write.mutate({ id: meal.id, cookId: cook || null })}
         >
           Save
         </Button>

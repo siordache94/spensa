@@ -4,12 +4,10 @@ import { useMediaQuery } from '@mantine/hooks'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
-import type { Tables } from '../lib/database.types.ts'
-import type { Recipe } from './RecipeView.tsx'
+import { useIngredients, type Ingredient } from '../lib/api/ingredients.ts'
+import { createIngredientForRecipe, saveRecipe, type Recipe } from '../lib/api/recipes.ts'
+import { useCommand } from '../lib/api/command.ts'
 
-type Ingredient = Tables<'ingredients'>
 type Unit = Ingredient['unit']
 
 const SERVES = [1, 2, 3, 4, 6, 8]
@@ -36,19 +34,12 @@ function newLine(patch: Partial<Line> = {}): Line {
   return { key: ++lastKey, ingredientId: null, amount: null, query: '', creating: false, newUnit: 'g', ...patch }
 }
 
-async function fetchIngredients(): Promise<Ingredient[]> {
-  const { data, error } = await supabase.from('ingredients').select('*').order('name')
-  if (error) throw error
-  return data
-}
-
 type Props = {
   recipe: Recipe | null // null = adding
   onClose: () => void
 }
 
 export default function RecipeForm({ recipe, onClose }: Props) {
-  const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
 
   const [name, setName] = useState(recipe?.name ?? '')
@@ -66,43 +57,13 @@ export default function RecipeForm({ recipe, onClose }: Props) {
 
   const dirty = useDirty({ name, tags, serves, instructions, lines: lines.map((l) => [l.ingredientId, l.amount]) })
 
-  const ingredientsQuery = useQuery({ queryKey: ['ingredients'], queryFn: fetchIngredients })
+  const ingredientsQuery = useIngredients()
   const ingredients = ingredientsQuery.data ?? []
   const unitOf = (id: string | null) => ingredients.find((i) => i.id === id)?.unit
 
-  const createIngredient = useMutation({
-    mutationFn: async (input: { name: string; unit: Unit }) => {
-      const { data, error } = await supabase.from('ingredients').insert({ name: input.name, unit: input.unit }).select().single()
-      if (error?.code === '23505') throw new Error('An ingredient with this name already exists.')
-      if (error) throw new Error(error.message)
-      return data
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['ingredients'] })
-    },
-  })
+  const createIngredient = useCommand(createIngredientForRecipe)
 
-  const save = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc('save_recipe', {
-        // Generated types omit null for uuid args; the RPC takes null to mean "insert".
-        recipe_id: (recipe?.id ?? null) as string,
-        name: name.trim(),
-        instructions,
-        tags,
-        serves,
-        lines: lines.map((line) => ({
-          ingredient_id: line.ingredientId ?? '',
-          qty_per_portion: unitOf(line.ingredientId) === 'to_taste' ? null : Number(line.amount) / serves,
-        })),
-      })
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recipes'] })
-      onClose()
-    },
-  })
+  const save = useCommand(saveRecipe, { onSuccess: onClose })
 
   function updateLine(key: number, patch: Partial<Line>) {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
@@ -122,7 +83,18 @@ export default function RecipeForm({ recipe, onClose }: Props) {
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (canSave) save.mutate()
+    if (!canSave) return
+    save.mutate({
+      id: recipe?.id ?? null,
+      name: name.trim(),
+      instructions,
+      tags,
+      serves,
+      lines: lines.map((line) => ({
+        ingredient_id: line.ingredientId ?? '',
+        qty_per_portion: unitOf(line.ingredientId) === 'to_taste' ? null : Number(line.amount) / serves,
+      })),
+    })
   }
 
   const failure = save.error?.message ?? createIngredient.error?.message ?? ingredientsQuery.error?.message

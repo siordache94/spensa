@@ -3,25 +3,17 @@ import { ActionIcon, Alert, Badge, Button, Group, Input, Modal, SegmentedControl
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconX } from '@tabler/icons-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { invalidatePantry } from '../lib/pantry.ts'
-import { supabase } from '../lib/supabase.ts'
-import { softDelete, restoreRows } from '../lib/softDelete.ts'
-import type { Tables } from '../lib/database.types.ts'
-
-type Unit = Tables<'ingredients'>['unit']
-
-export type Recipe = Tables<'recipes'> & {
-  recipe_ingredients: {
-    ingredient_id: string
-    qty_per_portion: number | null // null = to taste
-    ingredients: { name: string; unit: Unit }
-  }[]
-}
+import { useCommand } from '../lib/api/command.ts'
+import {
+  deleteRecipe,
+  restoreRecipeMeals,
+  RECIPE_IN_USE_MESSAGE,
+  unplanRecipeMeals,
+  usePlannedForRecipe,
+  type Recipe,
+} from '../lib/api/recipes.ts'
 
 const SERVES = [1, 2, 3, 4, 6, 8]
-
-const BLOCKED = 'Remove it from these planned meals to delete it.'
 
 // shortcut: markdown shown as plain text, render it if formatting matters
 const instructionsStyle = { whiteSpace: 'pre-wrap' } as const
@@ -34,25 +26,6 @@ function formatDate(date: string) {
   return new Date(`${date}T00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-type Meal = Tables<'planned_meals'>
-
-// Planned meals of this recipe after the latest snapshot (all of them if there is no snapshot).
-async function fetchPlanned(recipeId: string) {
-  const { data: snapshots, error: snapshotError } = await supabase
-    .from('snapshots')
-    .select('on_date')
-    .order('on_date', { ascending: false })
-    .limit(1)
-  if (snapshotError) throw snapshotError
-  const cutoff = snapshots[0]?.on_date
-
-  let query = supabase.from('planned_meals').select('*').eq('recipe_id', recipeId).order('date').order('slot')
-  if (cutoff) query = query.gt('date', cutoff)
-  const { data, error } = await query
-  if (error) throw error
-  return data
-}
-
 type Props = {
   recipe: Recipe
   onClose: () => void
@@ -60,64 +33,33 @@ type Props = {
 }
 
 export default function RecipeView({ recipe, onClose, onEdit }: Props) {
-  const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [serves, setServes] = useState(recipe.serves)
   const [confirming, setConfirming] = useState(false)
   const [clearing, setClearing] = useState(false)
 
-  const planned = useQuery({
-    queryKey: ['recipe-planned', recipe.id],
-    queryFn: () => fetchPlanned(recipe.id),
-  })
+  // Planned meals of this recipe after the latest snapshot (all of them if there is no snapshot).
+  const planned = usePlannedForRecipe(recipe.id)
   const meals = planned.data ?? []
   const blocked = meals.length > 0
 
-  const remove = useMutation({
-    mutationFn: async () => {
-      const { error } = await softDelete('recipes', [recipe.id])
-      if (error?.code === '23503') throw new Error(BLOCKED)
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['recipes'] })
-      onClose()
-    },
-  })
+  const remove = useCommand(deleteRecipe, { onSuccess: onClose })
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['recipe-planned', recipe.id] })
-    queryClient.invalidateQueries({ queryKey: ['planned_meals'] })
-    invalidatePantry(queryClient)
-  }
+  const restore = useCommand(restoreRecipeMeals)
 
-  const unplan = useMutation({
-    mutationFn: async (rows: Meal[]) => {
-      const { error } = await softDelete('planned_meals', rows.map((m) => m.id))
-      if (error) throw new Error(error.message)
-      return rows
-    },
-    onSuccess: (rows) => {
+  const unplan = useCommand(unplanRecipeMeals, {
+    onSuccess: (_, { ids }) => {
       setClearing(false)
       const id = notifications.show({
         autoClose: 5000,
         message: (
           <Group justify="space-between" wrap="nowrap">
-            <Text size="sm">{rows.length === 1 ? 'Removed from that date.' : `Removed from ${rows.length} dates.`}</Text>
-            <Button size="compact-md" variant="default" onClick={() => { notifications.hide(id); restore.mutate(rows) }}>Undo</Button>
+            <Text size="sm">{ids.length === 1 ? 'Removed from that date.' : `Removed from ${ids.length} dates.`}</Text>
+            <Button size="compact-md" variant="default" onClick={() => { notifications.hide(id); restore.mutate({ recipeId: recipe.id, ids }) }}>Undo</Button>
           </Group>
         ),
       })
     },
-    onSettled: refresh,
-  })
-
-  const restore = useMutation({
-    mutationFn: async (rows: Meal[]) => {
-      const { error } = await restoreRows('planned_meals', rows.map((m) => m.id))
-      if (error) throw new Error(error.message)
-    },
-    onSettled: refresh,
   })
 
   const lines = [...recipe.recipe_ingredients].sort((a, b) => a.ingredients.name.localeCompare(b.ingredients.name))
@@ -174,7 +116,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
                   h={44}
                   aria-label={`Remove from ${formatDate(meal.date)}, ${meal.slot}`}
                   disabled={unplan.isPending}
-                  onClick={() => unplan.mutate([meal])}
+                  onClick={() => unplan.mutate({ recipeId: recipe.id, ids: [meal.id] })}
                 >
                   <IconX size={20} stroke={1.75} />
                 </ActionIcon>
@@ -182,7 +124,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
             ))}
             {clearing ? (
               <Button.Group mt="xs">
-                <Button color="red" fullWidth loading={unplan.isPending} onClick={() => unplan.mutate(meals)}>
+                <Button color="red" fullWidth loading={unplan.isPending} onClick={() => unplan.mutate({ recipeId: recipe.id, ids: meals.map((m) => m.id) })}>
                   Remove from {meals.length} {meals.length === 1 ? 'date' : 'dates'}
                 </Button>
                 <Button variant="default" fullWidth onClick={() => setClearing(false)}>Keep</Button>
@@ -197,7 +139,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
           <Button variant="default" fullWidth onClick={onEdit}>Edit</Button>
           {confirming ? (
             <Button.Group>
-              <Button color="red" fullWidth loading={remove.isPending} onClick={() => remove.mutate()}>Delete for good</Button>
+              <Button color="red" fullWidth loading={remove.isPending} onClick={() => remove.mutate({ id: recipe.id })}>Delete for good</Button>
               <Button variant="default" fullWidth onClick={() => setConfirming(false)}>Keep</Button>
             </Button.Group>
           ) : (
@@ -205,7 +147,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
               Delete
             </Button>
           )}
-          {blocked && <Text size="sm" c="dimmed">{BLOCKED}</Text>}
+          {blocked && <Text size="sm" c="dimmed">{RECIPE_IN_USE_MESSAGE}</Text>}
         </Stack>
       </Stack>
     </Modal>

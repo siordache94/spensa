@@ -1,20 +1,11 @@
 import { useState } from 'react'
 import { Alert, Badge, Button, Center, Group, Loader, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
-import { useQuery } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
+import { useRecipes, type Recipe } from '../lib/api/recipes.ts'
 import RecipeForm from './RecipeForm.tsx'
-import RecipeView, { type Recipe } from './RecipeView.tsx'
-
-const RECIPE_SELECT = '*, recipe_ingredients(ingredient_id, qty_per_portion, ingredients(name, unit))'
-
-async function fetchRecipes(): Promise<Recipe[]> {
-  const { data, error } = await supabase.from('recipes').select(RECIPE_SELECT).order('name')
-  if (error) throw error
-  return data
-}
+import RecipeView from './RecipeView.tsx'
 
 export default function RecipesPage() {
-  const { data, isPending, error } = useQuery({ queryKey: ['recipes'], queryFn: fetchRecipes })
+  const { data, isPending, error } = useRecipes()
   const [search, setSearch] = useState('')
   const [viewing, setViewing] = useState<Recipe | null>(null)
   // undefined = form closed, null = adding, otherwise the recipe being edited
