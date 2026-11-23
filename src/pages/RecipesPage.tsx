@@ -1,54 +1,63 @@
 import { useState } from 'react'
-import { Alert, Badge, Button, Center, Group, Loader, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
-import { useRecipes, type Recipe } from '../lib/api/recipes.ts'
+import { Button, Group, Stack, TextInput } from '@mantine/core'
+import { useQueryClient } from '@tanstack/react-query'
+import { ErrorState } from '../components/ErrorState.tsx'
+import { Loading } from '../components/Loading.tsx'
+import { refreshRecipes, useRecipes, type Recipe } from '../lib/api/recipes.ts'
 import RecipeForm from './RecipeForm.tsx'
 import RecipeView from './RecipeView.tsx'
+import './lists.css'
 
 export default function RecipesPage() {
-  const { data, isPending, error } = useRecipes()
+  const queryClient = useQueryClient()
+  const { data, isPending, error, isFetching } = useRecipes()
   const [search, setSearch] = useState('')
   const [viewing, setViewing] = useState<Recipe | null>(null)
   // undefined = form closed, null = adding, otherwise the recipe being edited
   const [editing, setEditing] = useState<Recipe | null | undefined>(undefined)
 
+  const retry = () => { void refreshRecipes(queryClient) }
+  if (error && !data) return <ErrorState title="Couldn't load recipes" onRetry={retry} retrying={isFetching} />
+  if (isPending) return <Loading label="Loading recipes" />
+
   const recipes = data ?? []
-  const needle = search.trim().toLowerCase()
+  const term = search.trim()
+  const needle = term.toLowerCase()
   const shown = recipes.filter(
     (r) => r.name.toLowerCase().includes(needle) || r.tags.some((t) => t.toLowerCase().includes(needle)),
   )
 
   return (
-    <Stack>
+    <Stack className="sp-narrow">
       <Group justify="space-between" wrap="nowrap">
-        <Title order={2}>Recipes</Title>
+        <h2 className="sp-title">Recipes</h2>
         <Button onClick={() => setEditing(null)}>Add recipe</Button>
       </Group>
 
-      <TextInput placeholder="Search" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
+      {error && <ErrorState variant="inline" onRetry={retry} retrying={isFetching} />}
 
-      {error && <Alert color="red">{error.message}</Alert>}
-      {isPending && <Center py="xl"><Loader /></Center>}
-      {data && shown.length === 0 && (
-        <Text c="dimmed">{recipes.length === 0 ? 'No recipes yet.' : 'No matches.'}</Text>
+      <TextInput placeholder="Search" aria-label="Search recipes" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
+
+      {recipes.length === 0 && (
+        <div className="sp-lempty">
+          <p>No recipes yet. Add your first one.</p>
+          <Button onClick={() => setEditing(null)}>Add recipe</Button>
+        </div>
       )}
+      {recipes.length > 0 && shown.length === 0 && <p className="sp-dim">No recipes match “{term}”</p>}
 
       <Stack gap={0}>
         {shown.map((r) => (
-          <UnstyledButton
-            key={r.id}
-            onClick={() => setViewing(r)}
-            py="sm"
-            style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}
-          >
-            <Stack gap={4}>
-              <Text fw={500}>{r.name}</Text>
-              {r.tags.length > 0 && (
-                <Group gap={4}>
-                  {r.tags.map((tag) => <Badge key={tag} variant="light" size="sm">{tag}</Badge>)}
-                </Group>
-              )}
-            </Stack>
-          </UnstyledButton>
+          <button type="button" key={r.id} className="sp-lrow" onClick={() => setViewing(r)}>
+            <span className="sp-lrow-main">
+              <span className="sp-lrow-name">{r.name}</span>
+            </span>
+            {r.tags.length > 0 && (
+              <span className="sp-lrow-meta">
+                {r.tags.map((tag) => <span key={tag} className="sp-chip">{tag}</span>)}
+              </span>
+            )}
+          </button>
         ))}
       </Stack>
 

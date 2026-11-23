@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Button, Center, Divider, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Center, Divider, PasswordInput, Stack, TextInput } from '@mantine/core'
 import { useCommand } from '../lib/api/command.ts'
 import { signIn, signInWithGoogle, signUp } from '../lib/api/auth.ts'
+import './lists.css'
 
 export default function AuthPage() {
   const inviteFromLink = new URLSearchParams(window.location.search).get('invite') ?? ''
@@ -30,10 +31,10 @@ export default function AuthPage() {
 
   return (
     <Center mih="100vh" p="md">
-      <Paper w="100%" maw={380} p="lg" withBorder>
+      <div className="sp-panel sp-block sp-authcard">
         <form onSubmit={submit}>
           <Stack>
-            <Title order={2}>{signingIn ? 'Sign in' : 'Create account'}</Title>
+            <h2 className="sp-title">{signingIn ? 'Sign in' : 'Create account'}</h2>
             {error && <Alert color="red">{error}</Alert>}
             <Button type="button" variant="default" onClick={() => { setError(null); google.mutate() }}>
               Continue with Google
@@ -69,7 +70,7 @@ export default function AuthPage() {
             </Button>
           </Stack>
         </form>
-      </Paper>
+      </div>
     </Center>
   )
 }

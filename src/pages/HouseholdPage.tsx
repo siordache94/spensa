@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Alert, Button, Center, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Center, Stack, TextInput } from '@mantine/core'
 import { useCommand } from '../lib/api/command.ts'
 import { signOut, useAuthSession } from '../lib/api/auth.ts'
 import { createHousehold, joinHousehold } from '../lib/api/household.ts'
+import './lists.css'
 
 export default function HouseholdPage() {
   const [name, setName] = useState('')
@@ -38,8 +39,8 @@ export default function HouseholdPage() {
     <Center mih="100vh" p="md">
       <Stack w="100%" maw={380}>
         <Stack gap={4}>
-          <Title order={2}>Set up your household</Title>
-          <Text c="dimmed">Create one for your home, or join your partner's with their invite code.</Text>
+          <h2 className="sp-title">Set up your household</h2>
+          <p className="sp-dim">Create one for your home, or join your partner's with their invite code.</p>
         </Stack>
 
         {error && <Alert color="red">{error}</Alert>}
@@ -52,20 +53,20 @@ export default function HouseholdPage() {
           onChange={(e) => setYourName(e.currentTarget.value)}
         />
 
-        <Paper p="lg" withBorder>
+        <div className="sp-panel sp-block">
           <form onSubmit={(e) => { e.preventDefault(); setError(null); create.mutate({ name: name.trim(), displayName }) }}>
             <Stack>
-              <Title order={3}>Create a household</Title>
+              <h3 className="sp-lhead">Create a household</h3>
               <TextInput label="Household name" placeholder="e.g. Casa Rossi" value={name} onChange={(e) => setName(e.currentTarget.value)} />
               <Button type="submit" loading={busy} disabled={!name.trim()}>Create household</Button>
             </Stack>
           </form>
-        </Paper>
+        </div>
 
-        <Paper p="lg" withBorder>
+        <div className="sp-panel sp-block">
           <form onSubmit={(e) => { e.preventDefault(); setError(null); join.mutate({ code: code.trim(), displayName }) }}>
             <Stack>
-              <Title order={3}>Join a household</Title>
+              <h3 className="sp-lhead">Join a household</h3>
               <TextInput
                 label="Invite code"
                 description="Ask your partner: it's in their household menu, or scan their QR code."
@@ -75,7 +76,7 @@ export default function HouseholdPage() {
               <Button type="submit" loading={busy} disabled={!code.trim()}>Join household</Button>
             </Stack>
           </form>
-        </Paper>
+        </div>
 
         <Button variant="subtle" onClick={() => leave.mutate()}>Sign out</Button>
       </Stack>

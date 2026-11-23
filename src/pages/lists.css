@@ -1,0 +1,39 @@
+/* Secondary pages (Recipes, Ingredients, Settings, sign-in, household setup, Use soon, To taste): the gate-board voice
+   without the shop's five-column grid. Shared pieces live in theme.css (.sp-title, .sp-caps, .sp-chip, .sp-narrow). */
+
+/* Section head: a caps Barlow band over a steel rule. */
+.sp-lhead {
+  display: flex; align-items: center; gap: 8px; align-self: stretch; min-height: 32px; margin: 0; padding: 6px 0;
+  border-bottom: 1px solid var(--sp-edge);
+  font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
+}
+
+/* List row: a full-width hairline row at the density's row height. A button row is one tap target. */
+.sp-lrow {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: var(--row-h); padding: 6px 0;
+  background: none; border: 0; border-bottom: 1px solid var(--sp-rule);
+  color: var(--sp-text); font: inherit; text-align: left;
+}
+button.sp-lrow { cursor: pointer; }
+button.sp-lrow:hover { background: var(--sp-panel); }
+button.sp-lrow:active { background: var(--sp-rule); }
+.sp-lrow-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.sp-lrow-name { min-width: 0; font-size: var(--name-size); font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+.sp-lrow-sub { font-size: 14px; line-height: 1.2; color: var(--sp-text2); }
+/* right-hand column: tags, or a unit and a tag */
+.sp-lrow-meta { display: flex; flex: 0 1 50%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.sp-lrow-unit { font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
+.sp-lrow .sp-chip { max-width: 100%; }
+.sp-lrow .sp-inv-hint { padding-bottom: 0; flex: none; }
+
+/* Empty state: one line of copy and the action that fixes it. */
+.sp-lempty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px 0; }
+.sp-lempty p { margin: 0; font-size: 16px; line-height: 1.4; color: var(--sp-text); }
+
+/* Secondary text under a field or a heading: 14px, secondary ink. Plain <p>, so the size is not overridden. */
+.sp-dim { margin: 0; font-size: 14px; line-height: 1.4; color: var(--sp-text2); }
+
+/* A bounded panel for a form block (sign-in card, household choices). */
+.sp-block { padding: 16px; border-radius: 12px; }
+.sp-authcard { width: 100%; max-width: 380px; }

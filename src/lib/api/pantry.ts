@@ -1,10 +1,10 @@
 // Pantry aggregate: the raw facts for the Planner, Pantry and Shopping tabs, and what makes them stale.
 import { useMemo } from 'react'
-import { useMutation, useQuery, useQueryClient, type UseMutationOptions } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query'
 import { buildEvents, buildIngredients, localDay } from '../../domain/pantryRows.ts'
 import type { PantryEdits } from '../../domain/pantryEdits.ts'
 import { expiringSoon, replay, stockByIngredient as stockOf, type Day } from '../../domain/replay.ts'
-import { defineCommand, runCommand } from './command.ts'
+import { defineCommand, invalidateKeys, runCommand } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import type { DataPort } from './port.ts'
@@ -12,6 +12,9 @@ import type { DataPort } from './port.ts'
 export { localDay }
 
 export const today = (timeZone: string): Day => localDay(new Date(), timeZone)
+
+/** Retry for the pantry-backed screens: the settings row (timezone, slots) and the raw facts. */
+export const refreshPantry = (qc: QueryClient) => invalidateKeys(qc, [keys.household.settings(), keys.pantry.all()])
 
 /** Rows from the port, turned into replay input. Pure apart from the one port call, so tests can run it on the fake. */
 export async function fetchPantry(api: DataPort, tz: string, slots: string[] | undefined) {

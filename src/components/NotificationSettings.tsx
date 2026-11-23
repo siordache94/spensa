@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Group, Stack, Switch, Text, Title } from '@mantine/core'
+import { Button, Group, Stack, Switch, Text } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useCommand } from '../lib/api/command.ts'
@@ -37,7 +37,7 @@ export default function NotificationSettings() {
 
   return (
     <Stack gap="md">
-      <Title order={3}>Notifications</Title>
+      <h3 className="sp-lhead">Notifications</h3>
 
       {status === 'install-ios' && (
         <Text size="sm">Install Spensa to get notifications: tap Share <ShareIcon />, then Add to Home Screen, and open Spensa from there.</Text>

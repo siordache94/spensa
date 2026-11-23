@@ -148,8 +148,15 @@ body {
 .sp-cue { color: var(--sp-accent); }
 :root[data-spensa-theme='light'] .sp-cue { background: var(--sp-yellow); color: var(--sp-ink); padding: 1px 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 
-/* Who cooks: small caps chip on a planned meal */
-.sp-cook {
+/* Page title (same values as shop.css; shared here so the secondary pages do not depend on the shop stylesheet) */
+.sp-title { font-family: inherit; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 0; color: var(--sp-text); }
+/* Caps label voice for a small structural word (slot names, marks). Names and amounts never use it. */
+.sp-caps { font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2); }
+/* Secondary pages: one readable column, centred on wide screens */
+.sp-narrow { max-width: 760px; margin-inline: auto; }
+
+/* Who cooks: small caps chip on a planned meal. .sp-chip is the same boxed label for any tag. */
+.sp-cook, .sp-chip {
   display: inline-block;
   max-width: 100%;
   margin-bottom: 2px;

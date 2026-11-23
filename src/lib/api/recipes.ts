@@ -1,6 +1,7 @@
 // Recipes aggregate: the recipe list, form and view, and the planned meals a recipe has. Pages import from here.
 import { useQuery } from '@tanstack/react-query'
-import { defineCommand } from './command.ts'
+import type { QueryClient } from '@tanstack/react-query'
+import { defineCommand, invalidateKeys } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import { ApiError, type Ingredient, type PlannedMeal, type Recipe, type RecipeOption, type RecipeSave } from './port.ts'
@@ -15,6 +16,9 @@ export function useRecipes() {
   const api = useApi()
   return useQuery({ queryKey: keys.recipes.all(), queryFn: () => api.recipes.list() })
 }
+
+/** Retry for the recipe list. */
+export const refreshRecipes = (qc: QueryClient) => invalidateKeys(qc, [keys.recipes.all()])
 
 /** The planner's recipe picker. `enabled` false keeps it off (editing a meal does not need it). */
 export function useRecipeOptions(enabled = true) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Modal, Stack, Text } from '@mantine/core'
+import { AppShell, Box, Button, Center, CopyButton, Group, Menu, Modal, Stack, Text } from '@mantine/core'
 import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconChevronDown, IconFridge, IconSettings, IconShoppingCart } from '@tabler/icons-react'
 import { Link, NavLink, Route, Routes } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
@@ -8,7 +8,9 @@ import { notifications } from '@mantine/notifications'
 import { useWaitingShopMutations } from './lib/offlineQueue.ts'
 import { useCommand } from './lib/api/command.ts'
 import { useApi } from './lib/api/context.tsx'
-import { rotateInviteCode, useHouseholdRow, type HouseholdRow } from './lib/api/household.ts'
+import { refreshHousehold, rotateInviteCode, useHouseholdRow, type HouseholdRow } from './lib/api/household.ts'
+import { ErrorState } from './components/ErrorState.tsx'
+import { Loading } from './components/Loading.tsx'
 import { signOut } from './lib/api/auth.ts'
 import { useResyncSubscription } from './lib/api/push.ts'
 import './shell.css'
@@ -188,10 +190,18 @@ function Shell({ household }: { household: HouseholdRow }) {
 }
 
 function SignedIn() {
-  const { data: household, isPending, error } = useHouseholdRow()
+  const queryClient = useQueryClient()
+  const { data: household, isPending, error, isFetching } = useHouseholdRow()
 
-  if (isPending) return <Center h="100vh"><Loader /></Center>
-  if (error) return <Alert color="red" m="md">{error.message}</Alert>
+  if (isPending) return <Center h="100vh"><Loading label="Loading household" /></Center>
+  // undefined = never loaded (null means loaded, not in a household). Saved data still shows the shell.
+  if (error && household === undefined) {
+    return (
+      <Center h="100vh">
+        <ErrorState title="Couldn't load your household" onRetry={() => void refreshHousehold(queryClient)} retrying={isFetching} />
+      </Center>
+    )
+  }
   if (!household) return <HouseholdPage />
   return <Shell household={household} />
 }
@@ -223,7 +233,7 @@ function App() {
     })
   }, [api, signedIn])
 
-  if (signedIn === undefined) return <Center h="100vh"><Loader /></Center>
+  if (signedIn === undefined) return <Center h="100vh"><Loading label="Loading" /></Center>
   if (!signedIn) return <AuthPage />
   return <SignedIn />
 }

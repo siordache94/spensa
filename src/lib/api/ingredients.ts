@@ -1,6 +1,7 @@
 // Ingredients aggregate: queries (hooks) and commands. Pages import from here, never from supabase.
 import { useQuery } from '@tanstack/react-query'
-import { defineCommand } from './command.ts'
+import type { QueryClient } from '@tanstack/react-query'
+import { defineCommand, invalidateKeys } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import { ApiError, type Ingredient, type IngredientInput } from './port.ts'
@@ -12,6 +13,9 @@ export function useIngredients() {
   const api = useApi()
   return useQuery({ queryKey: keys.ingredients.all(), queryFn: () => api.ingredients.list() })
 }
+
+/** Retry for the ingredient list. */
+export const refreshIngredients = (qc: QueryClient) => invalidateKeys(qc, [keys.ingredients.all()])
 
 /** Names of the recipes using an ingredient. `ingredientId` undefined (adding) keeps the query off. */
 export function useIngredientUsage(ingredientId: string | undefined) {

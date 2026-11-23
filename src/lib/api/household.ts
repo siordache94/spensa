@@ -1,7 +1,8 @@
 // Household aggregate: the shared settings row (slots, horizon, expiry), the invite code, joining or creating a
 // household, and the members. Pages import from here.
 import { useQuery } from '@tanstack/react-query'
-import { defineCommand } from './command.ts'
+import type { QueryClient } from '@tanstack/react-query'
+import { defineCommand, invalidateKeys } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import type { HouseholdRow, HouseholdSettings, HouseholdUpdate, Member } from './port.ts'
@@ -11,6 +12,9 @@ export type { HouseholdRow, HouseholdSettings, HouseholdUpdate, Member }
 export const memberLabel = (m: Member) => m.display_name ?? 'Someone'
 
 // ---- Queries ---------------------------------------------------------------------------------------------------
+/** Retry for the household row (and everything under it). */
+export const refreshHousehold = (qc: QueryClient) => invalidateKeys(qc, [keys.household.all()])
+
 /** The household row of the signed-in user. null = they have not joined or created one yet. */
 export function useHouseholdRow() {
   const api = useApi()

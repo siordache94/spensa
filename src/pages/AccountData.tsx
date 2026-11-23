@@ -3,6 +3,7 @@ import { Alert, Anchor, Button, Group, Modal, Stack, Text, TextInput } from '@ma
 import { notifications } from '@mantine/notifications'
 import { useCommand } from '../lib/api/command.ts'
 import { exportMyData, useDeleteAccount } from '../lib/api/account.ts'
+import './lists.css'
 
 const CONFIRM_WORD = 'DELETE'
 // Deployers point this at their own filled-in notice (see PRIVACY.md).
@@ -27,10 +28,10 @@ function ExportData() {
   })
   return (
     <Stack gap={6} align="flex-start">
-      <Text fw={600} className="sp-label">Download my data</Text>
-      <Text size="sm" c="dimmed">
+      <h3 className="sp-lhead">Download my data</h3>
+      <p className="sp-dim">
         A JSON file with your account details and everything your household holds, including items you deleted.
-      </Text>
+      </p>
       <Button variant="default" loading={exp.isPending} onClick={() => exp.mutate()}>Download my data</Button>
     </Stack>
   )
@@ -50,11 +51,11 @@ function DeleteAccount() {
 
   return (
     <Stack gap={6} align="flex-start">
-      <Text fw={600} className="sp-label">Delete my account</Text>
-      <Text size="sm" c="dimmed">
+      <h3 className="sp-lhead">Delete my account</h3>
+      <p className="sp-dim">
         Permanently deletes your account. If you are the last member, your household and all its data go too. Otherwise the
         household keeps its data and your name is removed from it. This cannot be undone.
-      </Text>
+      </p>
       <Button color="red" variant="outline" onClick={() => { setTyped(''); setError(null); setOpen(true) }}>Delete my account</Button>
       <Modal opened={open} onClose={() => !busy && setOpen(false)} title="Delete your account?" centered>
         <form onSubmit={(e) => { e.preventDefault(); if (typed === CONFIRM_WORD) purge() }}>

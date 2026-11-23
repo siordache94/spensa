@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActionIcon, Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
+import { ActionIcon, Button, Group, Menu, Stack, Title } from '@mantine/core'
+import { useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
-import { usePantry } from '../lib/api/pantry.ts'
+import { refreshPantry, usePantry } from '../lib/api/pantry.ts'
+import { ErrorState } from '../components/ErrorState.tsx'
+import { Loading } from '../components/Loading.tsx'
 import { useCommand } from '../lib/api/command.ts'
 import { addMeal, deleteMeal, moveMeal, setMealCook } from '../lib/api/plan.ts'
 import { addDays, replay } from '../domain/replay.ts'
@@ -43,7 +46,8 @@ const relativeWeek = (offset: number) => {
 }
 
 export default function PlanPage() {
-  const { household, today, events, ingredients, meals, isPending, error } = usePantry()
+  const queryClient = useQueryClient()
+  const { household, today, events, ingredients, meals, isPending, error, isFetching } = usePantry()
   const [weekOffset, setWeekOffset] = useState(0)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [menuFor, setMenuFor] = useState<string | null>(null)
@@ -105,8 +109,11 @@ export default function PlanPage() {
     }
   }, [meals])
 
-  if (isPending) return <Loader />
-  if (error) return <Alert color="red">{error.message}</Alert>
+  // Saved plan on screen: a failed refresh gets an inline notice. No saved plan: the page's own error.
+  const hasData = household !== undefined && meals !== undefined
+  const retry = () => { void refreshPantry(queryClient) }
+  if (error && !hasData) return <ErrorState title="Couldn't load the plan" onRetry={retry} retrying={isFetching} />
+  if (isPending) return <Loading label="Loading plan" />
   if (!household || !today || !start || !end || !meals) return null
 
   const dialogMeal = dialog && 'mealId' in dialog ? meals.find((m) => m.id === dialog.mealId) : undefined
@@ -130,6 +137,7 @@ export default function PlanPage() {
 
   return (
     <Stack className="sp-planpage">
+      {error && <ErrorState variant="inline" onRetry={retry} retrying={isFetching} />}
       <NotifyPrompt />
       <UseSoon />
       <div className="sp-planhead">

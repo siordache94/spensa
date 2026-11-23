@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ActionIcon, Alert, Button, Center, Group, Loader, Menu, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
+import { ActionIcon, Alert, Button, Group, Menu, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { IconPencil, IconPlus, IconX } from '@tabler/icons-react'
-import { useSavePantryEdits, usePantryState } from '../lib/api/pantry.ts'
+import { useQueryClient } from '@tanstack/react-query'
+import { refreshPantry, useSavePantryEdits, usePantryState } from '../lib/api/pantry.ts'
 import { round3 } from '../lib/format.ts'
 import { setPantryOnHand } from '../lib/api/shop.ts'
 import { useCommand } from '../lib/api/command.ts'
@@ -11,9 +12,12 @@ import type { Tables } from '../lib/database.types.ts'
 import { addDays, byExpiry, type Day } from '../domain/replay.ts'
 import { diffEdits, type EditLine } from '../domain/pantryEdits.ts'
 import { Stepper } from '../components/Stepper.tsx'
+import { ErrorState } from '../components/ErrorState.tsx'
+import { Loading } from '../components/Loading.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import UseSoon from './UseSoon.tsx'
 import './pantry.css'
+import './lists.css'
 
 type Ingredient = Tables<'ingredients'>
 
@@ -36,7 +40,8 @@ function hint(expiry: Day, today: Day, expiringDays: number) {
 }
 
 export default function PantryPage() {
-  const { events, ingredients, household, today: day, isPending, error, remaining, stockByIngredient: stock } = usePantryState()
+  const queryClient = useQueryClient()
+  const { events, ingredients, household, today: day, isPending, error, isFetching, remaining, stockByIngredient: stock } = usePantryState()
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(false)
   // null = untouched: show the server state. Once edited, the draft wins and refetches are ignored.
@@ -84,8 +89,11 @@ export default function PantryPage() {
   const byId = useMemo(() => new Map((ingredients ?? []).map((i) => [i.id, i])), [ingredients])
   const toTaste = useMemo(() => (ingredients ?? []).filter((i) => i.unit === 'to_taste').sort((a, b) => a.name.localeCompare(b.name)), [ingredients])
 
-  if (error) return <Alert color="red">{error.message}</Alert>
-  if (isPending || !view || !day || !household || !ingredients) return <Center py="xl"><Loader /></Center>
+  // Saved data on screen: a failed refresh gets an inline notice. No saved data: the page's own error.
+  const hasData = events !== undefined && household !== undefined && ingredients !== undefined
+  const retry = () => { void refreshPantry(queryClient) }
+  if (error && !hasData) return <ErrorState title="Couldn't load the pantry" onRetry={retry} retrying={isFetching} />
+  if (isPending || !view || !day || !household || !ingredients) return <Loading label="Loading pantry" />
 
   const needle = search.trim().toLowerCase()
   const addable = ingredients
@@ -104,6 +112,8 @@ export default function PantryPage() {
           </ActionIcon>
         )}
       </Group>
+
+      {error && <ErrorState variant="inline" onRetry={retry} retrying={isFetching} />}
 
       <UseSoon />
 
@@ -242,7 +252,7 @@ export default function PantryPage() {
 
       {toTaste.length > 0 && (
         <Stack gap={0}>
-          <Title order={4}>To taste</Title>
+          <h3 className="sp-lhead">To taste</h3>
           {toTaste.map((i) => <OnHandRow key={i.id} ingredient={i} />)}
         </Stack>
       )}
@@ -262,9 +272,9 @@ function OnHandRow({ ingredient }: { ingredient: Ingredient }) {
   const onHand = toggle.isPending ? !!toggle.variables?.onHand : ingredient.on_hand
 
   return (
-    <Group justify="space-between" wrap="nowrap" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-      <Text fw={500} truncate="end" miw={0}>{ingredient.name}</Text>
-      <Switch checked={onHand} label={onHand ? 'On hand' : 'Out'} onChange={(e) => toggle.mutate({ id: ingredient.id, onHand: e.currentTarget.checked })} />
-    </Group>
+    <div className="sp-lrow">
+      <span className="sp-lrow-name">{ingredient.name}</span>
+      <Switch radius={0} checked={onHand} label={onHand ? 'On hand' : 'Out'} onChange={(e) => toggle.mutate({ id: ingredient.id, onHand: e.currentTarget.checked })} />
+    </div>
   )
 }

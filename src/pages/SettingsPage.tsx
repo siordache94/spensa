@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Group, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Button, Group, SegmentedControl, Stack, TextInput } from '@mantine/core'
 import { TimeInput } from '@mantine/dates'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
@@ -11,6 +11,7 @@ import NotificationSettings from '../components/NotificationSettings.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
 import { useSaveSlotEndTimes, useSlotEndTimes } from '../lib/api/checkins.ts'
 import { isEndTime, slotLabel } from '../lib/checkin.ts'
+import './lists.css'
 
 const notifyFailure = (title: string) => (e: Error) => notifications.show({ color: 'red', title, message: e.message })
 
@@ -56,8 +57,7 @@ function HouseholdSettings() {
   const changed = !!saved && (horizon !== saved.horizon_days || expiring !== saved.expiring_days || reminder !== saved.expiry_reminder_days)
   return (
     <Stack gap="md">
-      <Title order={3}>Household</Title>
-      <Text size="sm" c="dimmed">Shared with your household, so both phones use the same values.</Text>
+      <h3 className="sp-lhead">Household</h3>
       <Stepper
         label="Shopping horizon"
         description="A shopping trip covers today and the next N days. You can still leave meals off the trip."
@@ -117,8 +117,8 @@ function SlotEndTimes() {
   const changed = slots.some((s) => times[s] !== endTimes[s])
   return (
     <Stack gap="md">
-      <Text fw={600} className="sp-label">Meal end times</Text>
-      <Text size="sm" c="dimmed">When each slot ends. Shared with your household.</Text>
+      <h3 className="sp-lhead">Meal end times</h3>
+      <p className="sp-dim">When each slot ends. Shared with your household.</p>
       {slots.map((s) => (
         <TimeInput
           key={s}
@@ -143,16 +143,16 @@ function SlotEndTimes() {
 export default function SettingsPage() {
   const [settings, update] = useSettings()
   return (
-    <Stack gap="xl" maw={480}>
-      <Title order={2}>Settings</Title>
+    <Stack gap="xl" className="sp-narrow">
+      <h2 className="sp-title">Settings</h2>
       <YourName />
       <HouseholdSettings />
       <SlotEndTimes />
       <NotificationSettings />
-      <Text size="sm" c="dimmed">Theme and density are saved on this device only.</Text>
+      <p className="sp-dim">Theme and density are saved on this device only.</p>
 
       <Stack gap={6}>
-        <Text fw={600} className="sp-label">Theme</Text>
+        <h3 className="sp-lhead">Theme</h3>
         <SegmentedControl
           fullWidth
           aria-label="Theme"
@@ -160,11 +160,11 @@ export default function SettingsPage() {
           onChange={(v) => update({ theme: v as ThemeName })}
           data={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'amoled', label: 'AMOLED' }]}
         />
-        <Text size="sm" c="dimmed">Follows your phone until you pick one. AMOLED is pure black with the highest contrast.</Text>
+        <p className="sp-dim">Follows your phone until you pick one. AMOLED is pure black with the highest contrast.</p>
       </Stack>
 
       <Stack gap={6}>
-        <Text fw={600} className="sp-label">Density</Text>
+        <h3 className="sp-lhead">Density</h3>
         <SegmentedControl
           fullWidth
           aria-label="Density"
@@ -172,12 +172,12 @@ export default function SettingsPage() {
           onChange={(v) => update({ density: v as Density })}
           data={[{ value: 'compact', label: 'Compact' }, { value: 'airy', label: 'Airy' }]}
         />
-        <Text size="sm" c="dimmed">Airy makes rows and tick boxes larger for one-handed use in the shop.</Text>
+        <p className="sp-dim">Airy makes rows and tick boxes larger for one-handed use in the shop.</p>
       </Stack>
 
       <PrivacyAndData />
 
-      <Text size="xs" c="dimmed">Build {__BUILD__}</Text>
+      <p className="sp-dim">Build {__BUILD__}</p>
     </Stack>
   )
 }

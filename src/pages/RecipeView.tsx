@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ActionIcon, Alert, Badge, Button, Group, Input, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Button, Group, Input, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconX } from '@tabler/icons-react'
@@ -72,7 +72,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
 
         {recipe.tags.length > 0 && (
           <Group gap="xs">
-            {recipe.tags.map((tag) => <Badge key={tag} variant="light">{tag}</Badge>)}
+            {recipe.tags.map((tag) => <span key={tag} className="sp-chip">{tag}</span>)}
           </Group>
         )}
 
@@ -106,9 +106,10 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
             {meals.map((meal) => (
               <Group key={meal.id} justify="space-between" wrap="nowrap" gap="xs" mih={44}
                 style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-                <Text size="sm" fw={600} tt="uppercase" style={{ letterSpacing: '0.06em' }}>
-                  {formatDate(meal.date)} · {meal.slot}
-                </Text>
+                <Group gap="sm" wrap="nowrap" miw={0}>
+                  <Text>{formatDate(meal.date)}</Text>
+                  <span className="sp-caps">{meal.slot}</span>
+                </Group>
                 <ActionIcon
                   variant="subtle"
                   color="gray"
