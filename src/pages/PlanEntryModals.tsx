@@ -156,6 +156,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
   const dirty = useDirty(value)
   const write = useWrite(() => {
     queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
+    queryClient.invalidateQueries({ queryKey: ['pantry'] }) // same-day meal order depends on the slots
     onClose()
   })
   const clean = [...new Set(value.map((s) => s.trim()).filter(Boolean))]

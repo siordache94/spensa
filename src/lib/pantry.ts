@@ -13,7 +13,7 @@ async function fetchSettings() {
   return data
 }
 
-async function fetchPantry(tz: string) {
+async function fetchPantry(tz: string, slots: string[] | undefined) {
   // Soft-deleted rows never arrive: RLS select policies hide them (ADR 0003), so replay sees only live facts.
   // shortcut: fetches every row since forever; filter by the latest snapshot date when history grows
   const [batches, meals, adjustments, snapshots, ingredients] = await Promise.all([
@@ -31,7 +31,7 @@ async function fetchPantry(tz: string) {
   for (const r of [batches, meals, adjustments, snapshots, ingredients]) if (r.error) throw r.error
   const snap = snapshots.data![0]
 
-  const events = buildEvents({ batches: batches.data!, meals: meals.data!, adjustments: adjustments.data!, snapshot: snap }, tz)
+  const events = buildEvents({ batches: batches.data!, meals: meals.data!, adjustments: adjustments.data!, snapshot: snap, slots }, tz)
   const domainIngredients = buildIngredients(ingredients.data!)
   // Who bought each batch (null = unknown), kept beside the domain events: the replay doesn't need it.
   const batchAuthors: Record<string, string | null> = Object.fromEntries(batches.data!.map((b) => [b.id, b.created_by]))
@@ -42,7 +42,8 @@ async function fetchPantry(tz: string) {
 export function usePantry() {
   const settings = useQuery({ queryKey: ['household', 'settings'], queryFn: fetchSettings })
   const tz = settings.data?.timezone
-  const pantry = useQuery({ queryKey: ['pantry'], queryFn: () => fetchPantry(tz!), enabled: !!tz })
+  // slots come with the same settings row as tz, so they are known whenever tz is
+  const pantry = useQuery({ queryKey: ['pantry'], queryFn: () => fetchPantry(tz!, settings.data?.slots), enabled: !!tz })
   return {
     ...pantry,
     isPending: settings.isPending || pantry.isPending,

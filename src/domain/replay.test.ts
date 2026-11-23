@@ -319,3 +319,35 @@ describe('didn\'t cook and per-meal amounts (ADR 0005)', () => {
     expect(shoppingList(e, ings, '2026-11-01', '2026-11-30')).toEqual([{ ingredientId: 'pasta', qty: 150, packs: null }])
   })
 })
+
+describe('same-day meal order (slotOrder)', () => {
+  const dayMeal = (id: string, slot: string, position = 0): Meal => ({ ...meal(id, '2026-11-05', 1, pasta80), slot, position })
+  const stock100 = [batch('p', 100, '2026-11-01')]
+
+  it('with slotOrder, lunch eats before dinner on the same day even when dinner was saved first', () => {
+    const e = ev({ batches: stock100, meals: [dayMeal('dinner', 'dinner'), dayMeal('lunch', 'lunch')], slotOrder: ['lunch', 'dinner'] })
+    const { remaining, shortfalls } = replay(e, '2026-11-30')
+    expect(remaining.get('p')).toBe(0) // lunch 80, then dinner takes the last 20
+    expect(shortfalls).toEqual([{ mealId: 'dinner', ingredientId: 'pasta', missing: 60 }])
+  })
+
+  it('without slotOrder, the stored order is kept: dinner saved first takes the stock', () => {
+    const e = ev({ batches: stock100, meals: [dayMeal('dinner', 'dinner'), dayMeal('lunch', 'lunch')] })
+    const { shortfalls } = replay(e, '2026-11-30')
+    expect(shortfalls).toEqual([{ mealId: 'lunch', ingredientId: 'pasta', missing: 60 }])
+  })
+
+  it('unknown slots go after known ones; within a slot, position then id decide', () => {
+    const e = ev({
+      batches: stock100,
+      meals: [dayMeal('snack', 'snack'), dayMeal('dinner-b', 'dinner', 1), dayMeal('dinner-a', 'dinner', 0)],
+      slotOrder: ['lunch', 'dinner'],
+    })
+    const { shortfalls } = replay(e, '2026-11-30')
+    // order: dinner-a (80), dinner-b (20 left, short 60), snack (nothing left, short 80)
+    expect(shortfalls).toEqual([
+      { mealId: 'dinner-b', ingredientId: 'pasta', missing: 60 },
+      { mealId: 'snack', ingredientId: 'pasta', missing: 80 },
+    ])
+  })
+})

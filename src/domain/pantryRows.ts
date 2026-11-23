@@ -22,6 +22,8 @@ export type MealRow = {
   not_cooked?: boolean
   /** Per-meal amounts (live rows only); when not empty they replace the recipe's lines for this meal. */
   planned_meal_lines?: { ingredient_id: string; qty_total: number | string | null }[] | null
+  slot?: string
+  position?: number
   recipes: { recipe_ingredients: { ingredient_id: string; qty_per_portion: number | string | null }[] } | null
 }
 export type AdjustmentRow = {
@@ -42,7 +44,7 @@ export type IngredientRow = {
 }
 
 export function buildEvents(
-  rows: { batches: BatchRow[]; meals: MealRow[]; adjustments: AdjustmentRow[]; snapshot: SnapshotRow | null | undefined },
+  rows: { batches: BatchRow[]; meals: MealRow[]; adjustments: AdjustmentRow[]; snapshot: SnapshotRow | null | undefined; slots?: string[] | null },
   tz: string,
 ): PantryEvents {
   const snap = rows.snapshot
@@ -64,6 +66,8 @@ export function buildEvents(
       lines: (m.recipes?.recipe_ingredients ?? []).map((l) => ({ ingredientId: l.ingredient_id, qtyPerPortion: num(l.qty_per_portion) })),
       notCooked: m.not_cooked ?? false,
       override: m.planned_meal_lines?.length ? m.planned_meal_lines.map((l) => ({ ingredientId: l.ingredient_id, qty: num(l.qty_total) })) : undefined,
+      slot: m.slot,
+      position: m.position,
     })),
     adjustments: rows.adjustments.map((a) => ({
       ingredientId: a.ingredient_id,
@@ -77,6 +81,7 @@ export function buildEvents(
     snapshot: snap
       ? { onDate: snap.on_date, takenAt: snap.taken_at, batches: snap.snapshot_batches.map((s) => ({ batchId: s.batch_id, qty: Number(s.qty) })) }
       : null,
+    slotOrder: rows.slots ?? undefined,
   }
 }
 

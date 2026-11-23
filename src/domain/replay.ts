@@ -33,6 +33,10 @@ export interface Meal {
   notCooked?: boolean
   /** Per-meal amounts. When present and not empty they replace the recipe lines for this meal (ADR 0005). */
   override?: MealAmount[]
+  /** The household slot this meal is eaten in (e.g. 'lunch'). Only used for same-day ordering with `PantryEvents.slotOrder`. */
+  slot?: string
+  /** Position within its slot (the order the user saved them in). Only used with `PantryEvents.slotOrder`. */
+  position?: number
 }
 
 export interface Adjustment {
@@ -56,6 +60,8 @@ export interface PantryEvents {
   meals: Meal[]
   adjustments: Adjustment[]
   snapshot: Snapshot | null
+  /** The household's slots in day order, e.g. ['lunch','dinner']. When set, same-day meals are eaten in this order. Absent = stored order. */
+  slotOrder?: string[]
 }
 
 export interface Shortfall {
@@ -91,6 +97,16 @@ export const addDays = (d: Day, n: number): Day => {
   const t = new Date(`${d}T00:00:00Z`)
   t.setUTCDate(t.getUTCDate() + n)
   return t.toISOString().slice(0, 10)
+}
+
+/** Same-day meal order: slot (known slots in household order, unknown last), then position, then id. Null when the slot order is unknown. */
+const mealOrder = (slotOrder: string[] | undefined): ((a: Meal, b: Meal) => number) | null => {
+  if (!slotOrder) return null
+  const rank = (m: Meal) => {
+    const i = m.slot === undefined ? -1 : slotOrder.indexOf(m.slot)
+    return i < 0 ? slotOrder.length : i
+  }
+  return (a, b) => rank(a) - rank(b) || (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id)
 }
 
 const byExpiry = (a: Batch, b: Batch) =>
@@ -140,19 +156,20 @@ export function replay(
     if (first) remaining.set(first.id, a.kind === 'set' ? Math.max(0, a.qty ?? 0) : 0)
   }
 
-  type Step = { day: Day; rank: number; at: number; run: () => void }
+  type Step = { day: Day; rank: number; at: number; meal?: Meal; run: () => void }
   const steps: Step[] = [
     ...ev.batches
       .filter((b) => Date.parse(b.recordedAt) > snapAt)
       .map((b) => ({ day: b.addedOn, rank: 0, at: Date.parse(b.recordedAt), run: () => remaining.set(b.id, b.qty) })),
-    ...ev.meals.filter((m) => !snap || m.date > snap.onDate).map((m) => ({ day: m.date, rank: 1, at: 0, run: () => eat(m) })),
+    ...ev.meals.filter((m) => !snap || m.date > snap.onDate).map((m) => ({ day: m.date, rank: 1, at: 0, meal: m, run: () => eat(m) })),
     ...ev.adjustments
       .filter((a) => Date.parse(a.recordedAt) > snapAt)
       .map((a) => ({ day: a.on, rank: 2, at: Date.parse(a.recordedAt), run: () => adjust(a) })),
   ]
+  const byMeal = mealOrder(ev.slotOrder)
   steps
     .filter((s) => s.day <= upTo)
-    .sort((x, y) => x.day.localeCompare(y.day) || x.rank - y.rank || x.at - y.at)
+    .sort((x, y) => x.day.localeCompare(y.day) || x.rank - y.rank || x.at - y.at || (byMeal && x.meal && y.meal ? byMeal(x.meal, y.meal) : 0))
     .forEach((s) => s.run())
 
   return { remaining, shortfalls, consumed }

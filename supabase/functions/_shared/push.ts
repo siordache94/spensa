@@ -110,7 +110,7 @@ export type HouseholdData = {
 }
 
 export async function loadHousehold(admin: Admin, id: string, now = new Date()): Promise<HouseholdData> {
-  const { data: h, error } = await admin.from('households').select('timezone, horizon_days, expiry_reminder_days, slot_end_times').eq('id', id).single()
+  const { data: h, error } = await admin.from('households').select('timezone, horizon_days, expiry_reminder_days, slot_end_times, slots').eq('id', id).single()
   if (error) throw new Error(error.message)
   const tz = h.timezone
   const live = { household_id: id }
@@ -118,7 +118,7 @@ export async function loadHousehold(admin: Admin, id: string, now = new Date()):
     all((a, b) => admin.from('batches').select('*').match(live).is('deleted_at', null).order('id').range(a, b)),
     all((a, b) =>
       admin.from('planned_meals')
-        .select('id, date, slot, cook_id, created_at, portions, skip_shopping, not_cooked, planned_meal_lines(ingredient_id, qty_total), recipes(id, name, recipe_ingredients(ingredient_id, qty_per_portion, deleted_at))')
+        .select('id, date, slot, position, cook_id, created_at, portions, skip_shopping, not_cooked, planned_meal_lines(ingredient_id, qty_total), recipes(id, name, recipe_ingredients(ingredient_id, qty_per_portion, deleted_at))')
         .match(live).is('deleted_at', null).is('recipes.deleted_at', null).is('recipes.recipe_ingredients.deleted_at', null)
         .is('planned_meal_lines.deleted_at', null)
         .order('id').range(a, b)),
@@ -130,7 +130,7 @@ export async function loadHousehold(admin: Admin, id: string, now = new Date()):
   ])
   if (snapshots.error) throw new Error(snapshots.error.message)
 
-  const events = buildEvents({ batches, meals, adjustments, snapshot: snapshots.data?.[0] }, tz)
+  const events = buildEvents({ batches, meals, adjustments, snapshot: snapshots.data?.[0], slots: h.slots }, tz)
   const ingredients = buildIngredients(ingredientRows)
   const items: ShoppingItem[] = itemRows.map((i) => ({ id: i.id, ingredientId: i.ingredient_id, checked: i.checked, boughtBatchId: i.bought_batch_id }))
   const today = localDay(now, tz)
