@@ -123,14 +123,14 @@ isOneToOne: false
                   ]
                 },"households": {
                   Row: {
-                    "created_at": string,"expiring_days": number,"horizon_days": number,"id": string,"invite_code": string,"name": string,"slots": (string)[],"timezone": string
+                    "created_at": string,"expiring_days": number,"expiry_reminder_days": number,"horizon_days": number,"id": string,"invite_code": string,"name": string,"slots": (string)[],"timezone": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"expiring_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slots"?: (string)[],"timezone"?: string
                   }
                   Update: {
-                    "created_at"?: string,"expiring_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slots"?: (string)[],"timezone"?: string
                   }
                   Relationships: [
                     
@@ -180,6 +180,68 @@ isOneToOne: false
       referencedRelation: "recipes"
       referencedColumns: ["household_id","id"]
     }
+                  ]
+                },"push_config": {
+                  Row: {
+                    "functions_url": string,"id": boolean,"webhook_secret": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "functions_url": string,"id"?: boolean,"webhook_secret": string
+                  }
+                  Update: {
+                    "functions_url"?: string,"id"?: boolean,"webhook_secret"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"push_list_state": {
+                  Row: {
+                    "household_id": string,"known": (string)[],"window_at": string | null,"window_authors": (string)[],"window_keys": (string)[] | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "household_id": string,"known"?: (string)[],"window_at"?: string | null,"window_authors"?: (string)[],"window_keys"?: (string)[] | null
+                  }
+                  Update: {
+                    "household_id"?: string,"known"?: (string)[],"window_at"?: string | null,"window_authors"?: (string)[],"window_keys"?: (string)[] | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "push_list_state_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: true
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"push_prefs": {
+                  Row: {
+                    "expiry_checked_on": string | null,"expiry_time": string | null,"list_changes": boolean,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"updated_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"push_subscriptions": {
+                  Row: {
+                    "auth": string,"created_at": string,"endpoint": string,"id": string,"p256dh": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "auth": string,"created_at"?: string,"endpoint": string,"id"?: string,"p256dh": string,"user_id"?: string
+                  }
+                  Update: {
+                    "auth"?: string,"created_at"?: string,"endpoint"?: string,"id"?: string,"p256dh"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
                   ]
                 },"recipe_ingredients": {
                   Row: {
@@ -364,6 +426,20 @@ isOneToOne: false
 "purge_user":
 { Args: { "uid": string }; Returns: undefined
                            },
+"push_cron_tick":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"push_list_observe":
+{ Args: { "by": string,"hid": string,"keys": (string)[] }; Returns: boolean
+                           },
+"push_list_refresh":
+{ Args: { "hid": string,"keys": (string)[] }; Returns: undefined
+                           },
+"push_list_take":
+{ Args: { "hid": string,"min_age"?: string }; Returns: {
+              "authors": (string)[],"window_keys": (string)[]
+            }[]
+                           },
 "require_live":
 { Args: { "rid": string,"tbl": string }; Returns: undefined
                            },
@@ -378,6 +454,9 @@ isOneToOne: false
                            },
 "save_pantry_edits":
 { Args: { "adjustments": Json,"expiries"?: Json,"new_batches": Json }; Returns: undefined
+                           },
+"save_push_subscription":
+{ Args: { "p_auth": string,"p_endpoint": string,"p_p256dh": string }; Returns: undefined
                            },
 "save_recipe":
 { Args: { "instructions": string,"lines": Json,"name": string,"recipe_id": string,"serves": number,"tags": (string)[] }; Returns: string

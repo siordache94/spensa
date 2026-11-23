@@ -1,16 +1,11 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import type { Day, Ingredient, PantryEvents } from '../domain/replay'
+import { buildEvents, buildIngredients, localDay } from '../domain/pantryRows.ts'
+import type { Day } from '../domain/replay'
 import { supabase } from './supabase'
 
-const dayFormat = (timeZone: string) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
-
-/** The household-local calendar day of an instant ('YYYY-MM-DD'). */
-export const localDay = (iso: string | Date, timeZone: string): Day => dayFormat(timeZone).format(new Date(iso))
+export { localDay }
 
 export const today = (timeZone: string): Day => localDay(new Date(), timeZone)
-
-const num = (v: number | string | null) => (v === null ? null : Number(v))
 
 async function fetchSettings() {
   const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots').single()
@@ -36,50 +31,8 @@ async function fetchPantry(tz: string) {
   for (const r of [batches, meals, adjustments, snapshots, ingredients]) if (r.error) throw r.error
   const snap = snapshots.data![0]
 
-  const events: PantryEvents = {
-    batches: batches.data!.map((b) => ({
-      id: b.id,
-      ingredientId: b.ingredient_id,
-      qty: Number(b.qty),
-      // server time, so a phone with a wrong clock can't hide or misplace its batch; added_at is for display
-      addedOn: localDay(b.recorded_at, tz),
-      addedAt: b.added_at,
-      recordedAt: b.recorded_at,
-      expiresOn: b.expires_on,
-    })),
-    meals: meals.data!.map((m) => ({
-      id: m.id,
-      date: m.date,
-      portions: m.portions,
-      lines: (m.recipes?.recipe_ingredients ?? []).map((l) => ({
-        ingredientId: l.ingredient_id,
-        qtyPerPortion: num(l.qty_per_portion),
-      })),
-    })),
-    adjustments: adjustments.data!.map((a) => ({
-      ingredientId: a.ingredient_id,
-      batchId: a.batch_id,
-      kind: a.kind,
-      qty: num(a.qty),
-      on: localDay(a.recorded_at, tz),
-      at: a.at,
-      recordedAt: a.recorded_at,
-    })),
-    snapshot: snap
-      ? {
-          onDate: snap.on_date,
-          takenAt: snap.taken_at,
-          batches: snap.snapshot_batches.map((s) => ({ batchId: s.batch_id, qty: Number(s.qty) })),
-        }
-      : null,
-  }
-  const domainIngredients: Ingredient[] = ingredients.data!.map((i) => ({
-    id: i.id,
-    unit: i.unit,
-    packSize: num(i.pack_size),
-    minStock: num(i.min_stock),
-    onHand: i.on_hand,
-  }))
+  const events = buildEvents({ batches: batches.data!, meals: meals.data!, adjustments: adjustments.data!, snapshot: snap }, tz)
+  const domainIngredients = buildIngredients(ingredients.data!)
   // Who bought each batch (null = unknown), kept beside the domain events: the replay doesn't need it.
   const batchAuthors: Record<string, string | null> = Object.fromEntries(batches.data!.map((b) => [b.id, b.created_by]))
   return { events, domainIngredients, ingredients: ingredients.data!, meals: meals.data!, batchAuthors }

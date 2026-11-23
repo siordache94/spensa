@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMembers, useMyId } from '../lib/members.ts'
 import { supabase } from '../lib/supabase.ts'
 import { PrivacyAndData } from './AccountData.tsx'
+import NotificationSettings from '../components/NotificationSettings.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
 
 function YourName() {
@@ -49,7 +50,7 @@ function HouseholdSettings() {
   const household = useQuery({
     queryKey: ['household', 'settings'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots').single()
+      const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, expiry_reminder_days, slots').single()
       if (error) throw error
       return data
     },
@@ -57,19 +58,20 @@ function HouseholdSettings() {
   const saved = household.data
   const [horizon, setHorizon] = useState<number | null>(7)
   const [expiring, setExpiring] = useState<number | null>(3)
+  const [reminder, setReminder] = useState<number | null>(2)
   useEffect(() => {
-    if (saved) { setHorizon(saved.horizon_days); setExpiring(saved.expiring_days) }
+    if (saved) { setHorizon(saved.horizon_days); setExpiring(saved.expiring_days); setReminder(saved.expiry_reminder_days) }
   }, [saved])
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('households').update({ horizon_days: horizon!, expiring_days: expiring! }).not('id', 'is', null)
+      const { error } = await supabase.from('households').update({ horizon_days: horizon!, expiring_days: expiring!, expiry_reminder_days: reminder! }).not('id', 'is', null)
       if (error) throw new Error(error.message)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household', 'settings'] }),
     onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }),
   })
-  const valid = intIn(horizon, 1, 14) && intIn(expiring, 0, 60)
-  const changed = !!saved && (horizon !== saved.horizon_days || expiring !== saved.expiring_days)
+  const valid = intIn(horizon, 1, 14) && intIn(expiring, 0, 60) && intIn(reminder, 0, 14)
+  const changed = !!saved && (horizon !== saved.horizon_days || expiring !== saved.expiring_days || reminder !== saved.expiry_reminder_days)
   return (
     <Stack gap="md">
       <Title order={3}>Household</Title>
@@ -98,6 +100,18 @@ function HouseholdSettings() {
         onChange={setExpiring}
         error={expiring !== null && !intIn(expiring, 0, 60) ? 'Between 0 and 60' : undefined}
       />
+      <Stepper
+        label="Expiry reminder"
+        description="The daily expiry notification lists food that expires within N days (0 = today only)."
+        unit="days"
+        size="lg"
+        min={0}
+        max={14}
+        allowDecimal={false}
+        value={reminder}
+        onChange={setReminder}
+        error={reminder !== null && !intIn(reminder, 0, 14) ? 'Between 0 and 14' : undefined}
+      />
       <Button loading={save.isPending} disabled={!saved || !valid || !changed} onClick={() => save.mutate()}>Save household settings</Button>
     </Stack>
   )
@@ -110,6 +124,7 @@ export default function SettingsPage() {
       <Title order={2}>Settings</Title>
       <YourName />
       <HouseholdSettings />
+      <NotificationSettings />
       <Text size="sm" c="dimmed">Theme and density are saved on this device only.</Text>
 
       <Stack gap={6}>

@@ -17,6 +17,7 @@ import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
 import { memberLabel, useMembers } from '../lib/members.ts'
 import { changeMessage, diffToBuy, loadAcked, relativeTime, saveAcked, selectedMealIds, tripRange } from '../lib/trip.ts'
+import { itemKey, needKey, resolvedKeys } from '../domain/toBuy.ts'
 import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
 import './shop.css'
 
@@ -332,7 +333,7 @@ export default function ShopPage() {
       const ing = byId.get(n.ingredientId)
       if (!ing) continue
       if (n.qty === null) {
-        out.push({ key: `need-${n.ingredientId}`, name: ing.name, category: ing.category, free: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
+        out.push({ key: needKey(n.ingredientId), name: ing.name, category: ing.category, free: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
         continue
       }
       const b: Buy = {
@@ -343,7 +344,7 @@ export default function ShopPage() {
         expiresOn: expiryFor(ing.shelf_life_days),
       }
       out.push({
-        key: `need-${n.ingredientId}`,
+        key: needKey(n.ingredientId),
         name: ing.name,
         category: ing.category,
         note: stapleIds.has(n.ingredientId) ? 'Staple, below min stock' : undefined,
@@ -368,7 +369,7 @@ export default function ShopPage() {
           shoppingItemId: item.id,
         }
         out.push({
-          key: `item-${item.id}`,
+          key: itemKey(item.id),
           name: item.ingredients.name,
           category: item.ingredients.category,
           figure: item.qty ? `${round1(item.qty)}` : undefined,
@@ -377,7 +378,7 @@ export default function ShopPage() {
           onTick: () => mutateBuy(withIds(b)),
         })
       } else if (!item.checked) {
-        out.push({ key: `item-${item.id}`, name: item.text ?? '', category: null, onTick: () => mutateCheck(item.id) })
+        out.push({ key: itemKey(item.id), name: item.text ?? '', category: null, onTick: () => mutateCheck(item.id) })
       }
     }
 
@@ -424,12 +425,14 @@ export default function ShopPage() {
     ...checkedTexts.map((i) => ({ key: `text-${i.id}`, id: i.id, name: i.text ?? '', figure: undefined, unit: undefined, free: undefined, held: false, at: undefined, untick: () => uncheck.mutate(i.id) })),
   ]
   useEffect(() => {
-    resolvedRef.current = new Set([
-      ...(events?.batches ?? []).filter((b) => b.addedOn === today).map((b) => `need-${b.ingredientId}`),
-      ...(ingredients ?? []).filter((i) => i.on_hand).map((i) => `need-${i.id}`),
-      ...(items.data ?? []).filter((i) => i.checked || i.bought_batch_id).map((i) => `item-${i.id}`),
-    ])
-  }, [events, today, ingredients, items.data])
+    if (!events || !domainIngredients || !today) return
+    resolvedRef.current = resolvedKeys({
+      events,
+      ingredients: domainIngredients,
+      today,
+      items: (items.data ?? []).map((i) => ({ id: i.id, ingredientId: i.ingredient_id, checked: i.checked, boughtBatchId: i.bought_batch_id })),
+    })
+  }, [events, domainIngredients, today, items.data])
   const lastPartner = todaysBatches.find((b) => byPartner(b.id))
   const failure = pantry.error ?? items.error
 

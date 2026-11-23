@@ -31,6 +31,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
+        // push + notificationclick handlers live in public/push-sw.js; the generated caching worker is unchanged
+        importScripts: ['push-sw.js'],
         skipWaiting: true,
         clientsClaim: true,
         runtimeCaching: [

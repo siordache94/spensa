@@ -13,7 +13,7 @@ The controller of your data is **[CONTROLLER NAME]**, contact **[EMAIL / ADDRESS
 - **Account**: your email address, a hashed password (or the Google account id if you sign in with Google), account creation time, sign-in sessions.
 - **Household data**: the name you give your household and your display name; ingredients, recipes, meal plans, pantry batches and stock adjustments, inventory snapshots, shopping list items; who created, changed or deleted each item and when; the household invite code.
 - **Device settings** (theme, density) are kept in your browser only and never sent to the server.
-- **Push subscriptions** _(coming soon)_: the push endpoint and keys of the devices you enable notifications on.
+- **Push notifications**: if you turn them on, the push endpoint and keys of that device (a web address at Google, Apple or Mozilla plus encryption keys), and your choices: list changes on or off, and the time of the daily expiry reminder. The notification text (for example "Anna changed the list: 2 added" or "Expiring: Milk tomorrow") is sent through the push service and shown on your device. Turning notifications off on a device deletes its subscription; subscriptions the push service reports as expired are deleted automatically.
 
 Spensa has no analytics or advertising trackers. [Confirm for your deployment.]
 
@@ -25,7 +25,7 @@ To provide the service you asked for: sign you in, keep your household's pantry,
 
 - **Supabase** (database, authentication, edge functions): [REGION of your project].
 - **Cloudflare** (hosting of the web app; sees ordinary request data such as IP address).
-- **Google (FCM) and Apple (APNs)** _(coming soon)_: deliver web push notifications to your devices.
+- **Google (FCM), Apple (APNs) and Mozilla (autopush)**: only if you turn on notifications. Whichever one belongs to your browser delivers web push notifications to your device. Messages are encrypted for your device, but the service sees the endpoint, the time and the message size. [Add the transfer safeguards for these providers if they apply to you.]
 - **Google** if you use "Continue with Google" for sign-in.
 
 [Add any email provider you configure for sign-up and password mails. Describe international transfers and safeguards if any processor is outside the EEA.]
@@ -40,8 +40,9 @@ To provide the service you asked for: sign you in, keep your household's pantry,
 
 You can ask for access, portability, rectification, erasure, restriction, and you can object, and you can complain to your data protection authority ([NAME OF AUTHORITY]). In the app, **Settings** lets you:
 
-- **Download my data**: a JSON file of your account details and everything your household holds, including hidden (deleted) rows.
-- **Delete my account**: permanently deletes your account. If you are the last member, the whole household and all its data are erased. If other members remain, the household keeps its data, your name is removed from it, and the items you created or changed lose their link to you.
+- **Download my data**: a JSON file of your account details, your notification choices and subscribed device addresses (not their keys), and everything your household holds, including hidden (deleted) rows.
+- **Notifications**: turn them off per device, or change what you get, under Settings.
+- **Delete my account**: permanently deletes your account, and your push subscriptions and notification choices with it. If you are the last member, the whole household and all its data are erased. If other members remain, the household keeps its data, your name is removed from it, and the items you created or changed lose their link to you.
 - **Edit your name** under Settings, "Your name".
 
 For anything else, contact [CONTROLLER CONTACT].

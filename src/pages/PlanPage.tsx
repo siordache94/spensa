@@ -6,6 +6,7 @@ import { softDelete } from '../lib/softDelete.ts'
 import { addDays, replay } from '../domain/replay.ts'
 import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
 import UseSoon from './UseSoon.tsx'
+import NotifyPrompt from '../components/NotifyPrompt.tsx'
 import './plan.css'
 import { CookModal, MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
 
@@ -89,6 +90,7 @@ export default function PlanPage() {
 
   return (
     <Stack className="sp-planpage">
+      <NotifyPrompt />
       <UseSoon />
       <div className="sp-planhead">
       <Group justify="space-between" className="sp-ph-a">

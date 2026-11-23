@@ -8,6 +8,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { notifications } from '@mantine/notifications'
 import { supabase } from './lib/supabase.ts'
 import { useWaitingShopMutations } from './lib/offlineQueue.ts'
+import { useResyncSubscription } from './lib/push.ts'
 import './shell.css'
 import AuthPage from './pages/AuthPage.tsx'
 import HouseholdPage from './pages/HouseholdPage.tsx'
@@ -142,11 +143,12 @@ function HouseholdMenu({ household }: { household: Household }) {
 }
 
 function Shell({ household }: { household: Household }) {
+  useResyncSubscription()
   return (
     <AppShell
-      header={{ height: 48 }}
+      header={{ height: 'calc(48px + env(safe-area-inset-top, 0px))' }}
       navbar={{ width: 200, breakpoint: 'sm', collapsed: { mobile: true } }}
-      footer={{ height: { base: 60, sm: 0 } }}
+      footer={{ height: { base: 'calc(60px + env(safe-area-inset-bottom, 0px))', sm: 0 } }}
       padding="md"
     >
       <AppShell.Header className="sp-header">

@@ -403,6 +403,16 @@ deno_version = 2
 [functions.delete-account]
 verify_jwt = true
 
+[functions.push-test]
+verify_jwt = true
+
+# Called by the database with the shared PUSH_WEBHOOK_SECRET (x-push-secret), not by a signed-in user.
+[functions.push-list]
+verify_jwt = false
+
+[functions.push-cron]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

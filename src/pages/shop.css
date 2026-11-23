@@ -5,7 +5,7 @@
   --c-unit: 52px;
   --c-edit: 44px;
   --cols: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit) var(--c-edit);
-  padding-bottom: 150px; /* clears the pinned dock above the tab bar */
+  padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); /* clears the pinned dock above the tab bar */
   margin-inline: calc(var(--mantine-spacing-md) * -1);
 }
 .sp-shop > .sp-pad { padding-inline: 16px; }
@@ -64,7 +64,7 @@
 
 /* Dock: pinned above the tab bar on phones, bottom of the content column on wide screens. */
 .sp-dock {
-  position: fixed; z-index: 90; left: 8px; right: 8px; bottom: 68px;
+  position: fixed; z-index: 90; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 @media (min-width: 48em) {
   /* sticky inside the content column, so it follows the centred layout on wide screens */

@@ -1,6 +1,6 @@
 /* Pantry: gate-board bands and compact batch rows. Flat, hairline-separated, no shadows. */
 .sp-inv-body { margin-inline: calc(var(--mantine-spacing-md) * -1); }
-.sp-inv-body[data-editing] { padding-bottom: 80px; } /* clears the save bar */
+.sp-inv-body[data-editing] { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); } /* clears the save bar */
 .sp-inv-help { padding: 4px 16px 12px; max-width: 65ch; }
 .sp-inv-band {
   display: flex; align-items: baseline; gap: 8px;
@@ -22,7 +22,7 @@
 .sp-inv-more { padding: 0 8px 0 12px; }
 .sp-inv-add { padding: 16px 16px 0; }
 .sp-savebar {
-  position: fixed; z-index: 90; left: 8px; right: 8px; bottom: 68px;
+  position: fixed; z-index: 90; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   display: flex; gap: 8px; padding: 8px; background: var(--sp-panel); border: 1px solid var(--sp-edge); border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 .sp-savebar > :first-child { flex: 1; }

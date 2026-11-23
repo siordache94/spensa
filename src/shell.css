@@ -1,11 +1,14 @@
 .sp-header { background: var(--sp-body); border-bottom: 1px solid var(--sp-edge); }
+/* viewport-fit=cover: in the installed app the page can sit under the status bar and the home indicator.
+   The AppShell header/footer heights add the insets (App.tsx); the padding keeps their content clear of them. */
+.sp-header { padding-top: env(safe-area-inset-top, 0px); padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
 .sp-brand { font-family: var(--sp-label); font-weight: 600; font-size: 20px; letter-spacing: 0.01em; color: var(--sp-text); line-height: 1; text-decoration: none; }
 .sp-offline {
   font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
   color: var(--sp-accent); border: 1px solid var(--sp-yellow); border-radius: 999px; padding: 5px 9px;
 }
 .sp-hh { color: var(--sp-text); font-weight: 600; min-height: 44px; }
-.sp-nav { background: var(--sp-panel); border-top: 1px solid var(--sp-edge); }
+.sp-nav { background: var(--sp-panel); border-top: 1px solid var(--sp-edge); padding-bottom: env(safe-area-inset-bottom, 0px); padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
 .sp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); height: 100%; }
 .sp-tab {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px;
