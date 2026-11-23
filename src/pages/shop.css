@@ -2,9 +2,9 @@
 .sp-shop {
   --c-tick: calc(var(--tick) + 16px);
   --c-amt: calc(var(--amount-size) * 3);
-  --c-unit: 44px;
-  --c-pack: 60px;
-  --cols: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit) var(--c-pack);
+  --c-unit: 52px;
+  --c-edit: 44px;
+  --cols: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit) var(--c-edit);
   padding-bottom: 150px; /* clears the pinned dock above the tab bar */
   margin-inline: calc(var(--mantine-spacing-md) * -1);
 }
@@ -14,34 +14,34 @@
 .sp-trip { font: 600 13px/1.2 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); padding: 4px 16px 10px; }
 .sp-note { font-size: 14px; line-height: 1.4; color: var(--sp-text2); padding: 4px 16px 12px; max-width: 65ch; }
 
-.sp-cols, .sp-row, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 16px 0 4px; }
+.sp-cols, .sp-row, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 4px 0 4px; }
 .sp-cols {
   height: 24px; background: var(--sp-panel); border-block: 1px solid var(--sp-edge);
   font: 600 11px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2);
 }
 .sp-cols > :nth-child(1) { grid-column: 2; }
 .sp-cols > :nth-child(2) { grid-column: 3; text-align: right; }
-.sp-cols > :nth-child(3) { grid-column: 5; }
 .sp-band {
   min-height: 28px; margin-top: 12px; border-bottom: 1px solid var(--sp-edge);
   font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
 }
 .sp-band > span { grid-column: 1 / 4; padding-left: 12px; }
-.sp-band > small { grid-column: 4 / 6; text-align: right; font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; color: var(--sp-text2); }
+.sp-band > small { grid-column: 4 / 6; text-align: right; font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; color: var(--sp-text2); padding-right: 12px; }
 .sp-band.sp-day { background: var(--sp-panel); border-block: 1px solid var(--sp-rule); margin-top: 0; }
 .sp-band.sp-day > span { grid-column: 1 / -1; }
 
 .sp-row { min-height: var(--row-h); border-bottom: 1px solid var(--sp-rule); position: relative; cursor: pointer; }
 .sp-row > .sp-tickcell { display: grid; place-items: center; min-height: var(--row-h); align-self: stretch; }
 .sp-name { font-size: var(--name-size); font-weight: 500; line-height: 1.2; color: var(--sp-text); text-align: left; padding: 6px 4px 6px 0; overflow-wrap: anywhere; }
-button.sp-name { background: none; border: 0; font-family: inherit; cursor: pointer; align-self: stretch; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+/* The row ticks; amount editing lives behind this explicit 44px button so a row tap is never ambiguous. */
+.sp-edit { width: 44px; height: 44px; min-width: 44px; color: var(--sp-text2); }
 .sp-name em { display: block; font-style: normal; font-size: 12px; font-weight: 500; color: var(--sp-accent); margin-top: 2px; }
 .sp-num { font-variant-numeric: tabular-nums lining-nums; text-align: right; font-size: var(--amount-size); font-weight: 600; line-height: 1; }
 .sp-unit { padding-left: 6px; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
 .sp-free { grid-column: 3 / 5; text-align: right; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
-.sp-pack { padding-left: 4px; font-size: 12px; line-height: 1.15; color: var(--sp-text2); }
+.sp-packline { display: block; font-size: 12px; font-weight: 500; line-height: 1.15; color: var(--sp-text2); margin-top: 2px; }
 :root[data-spensa-density='airy'] .sp-unit { font-size: 16px; }
-:root[data-spensa-density='airy'] .sp-pack { font-size: 13px; }
+:root[data-spensa-density='airy'] .sp-packline { font-size: 13px; }
 
 .sp-cart-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; margin-top: 12px; min-height: 44px; border-bottom: 1px solid var(--sp-edge); }
 .sp-cart-head > span { font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text); }

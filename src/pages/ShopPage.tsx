@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
+import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -17,7 +18,7 @@ import './shop.css'
 // What the UI builds; ticking adds the batch id and time (see shopMutations.ts).
 type Buy = Omit<BuyVars, 'batchId' | 'addedAt'>
 
-// One row on the list. `buy` is set for rows with a quantity (tap the name to change it).
+// One row on the list. `buy` is set for rows with a quantity (the pencil at the row end changes it).
 type Entry = {
   key: string
   name: string
@@ -151,9 +152,11 @@ function Setup({ meals, slots, today, horizon, trip, onStart }: {
         </div>
       ))}
 
-      <div className="sp-more">
-        <Button variant="default" size="md" fullWidth onClick={() => setExtra((e) => e + 1)}>Show 7 more days</Button>
-      </div>
+      {meals.some((m) => m.date > end) && (
+        <div className="sp-more">
+          <Button variant="default" size="md" fullWidth onClick={() => setExtra((e) => e + 1)}>Show 7 more days</Button>
+        </div>
+      )}
 
       <div className="sp-dock">
         <Button className="sp-dock-btn" size="lg" fullWidth onClick={() => onStart([...selected].filter((id) => meals.some((m) => m.id === id)))}>
@@ -436,7 +439,7 @@ export default function ShopPage() {
         </Group>
       </form>
 
-      <div className="sp-cols" aria-hidden="true"><span>Item</span><span>Amount</span><span>Pack</span></div>
+      <div className="sp-cols" aria-hidden="true"><span>Item</span><span>Amount</span></div>
 
       {entries.length === 0 && <p className="sp-empty">Nothing left to buy for this trip.</p>}
 
@@ -446,16 +449,19 @@ export default function ShopPage() {
           {rows.map((e) => (
             <label key={e.key} className="sp-row">
               <Tick checked={false} label={`Bought ${e.name}`} onChange={() => e.onTick()} />
-              {e.buy ? (
-                <button type="button" className="sp-name" aria-label={`Change amount for ${e.name}`} onClick={(ev) => { ev.preventDefault(); setBuying(e.buy!) }}>
-                  {e.name}
-                  {e.note && <em>{e.note}</em>}
-                </button>
-              ) : (
-                <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}</span>
-              )}
+              <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}{e.pack && <small className="sp-packline">{e.pack}</small>}</span>
               <Figure figure={e.figure} unit={e.unit} free={e.free} />
-              <span className="sp-pack">{e.pack}</span>
+              {e.buy ? (
+                <ActionIcon
+                  className="sp-edit"
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`Change amount for ${e.name}`}
+                  onClick={(ev) => { ev.preventDefault(); setBuying(e.buy!) }}
+                >
+                  <IconPencil size={20} stroke={1.75} />
+                </ActionIcon>
+              ) : <span />}
             </label>
           ))}
         </div>
@@ -479,7 +485,7 @@ export default function ShopPage() {
                 {c.held && c.at && <em>ticked by partner · {relativeTime(c.at, now)}</em>}
               </span>
               <Figure figure={c.figure} unit={c.unit} free={c.free} />
-              <span className="sp-pack" />
+              <span />
               {c.held && <button type="button" className="sp-ack" aria-label={`Acknowledge ${c.name}, ticked by partner`} onClick={() => acknowledge(c.id)} />}
             </div>
           ))}
