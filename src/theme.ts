@@ -1,6 +1,6 @@
 import {
-  Accordion, ActionIcon, Badge, Button, Card, Checkbox, Combobox, Drawer, Input, InputWrapper, Menu, Modal, type MantineColorsTuple,
-  Paper, Popover, SegmentedControl, createTheme,
+  Accordion, ActionIcon, Autocomplete, Badge, Button, Card, Checkbox, Combobox, Drawer, Input, InputWrapper, Menu, Modal, MultiSelect, type MantineColorsTuple,
+  Paper, Popover, SegmentedControl, Select, TagsInput, createTheme,
 } from '@mantine/core'
 import './theme.css'
 
@@ -8,6 +8,13 @@ import './theme.css'
 const yellow: MantineColorsTuple = [
   '#fff8dc', '#fdefb5', '#fae488', '#f8da61', '#f6d14c', '#f5cc3b', '#d9b02a', '#b58f1c', '#8a6c12', '#5e490b',
 ]
+
+// Dropdowns stay put: no flip/shift (they oscillate when the soft keyboard resizes the viewport) and no fade.
+const comboboxProps = {
+  position: 'bottom' as const,
+  middlewares: { flip: false, shift: false },
+  transitionProps: { duration: 0 },
+}
 
 const label = '"Barlow Semi Condensed", "Arial Narrow", sans-serif'
 
@@ -35,7 +42,11 @@ export const theme = createTheme({
     Input: Input.extend({ classNames: { input: 'sp-input' } }),
     InputWrapper: InputWrapper.extend({ classNames: { label: 'sp-input-label' } }),
     Popover: Popover.extend({ classNames: { dropdown: 'sp-overlay-content' } }),
-    Combobox: Combobox.extend({ classNames: { dropdown: 'sp-overlay-content' } }),
+    Select: Select.extend({ defaultProps: { comboboxProps } }),
+    Autocomplete: Autocomplete.extend({ defaultProps: { comboboxProps } }),
+    MultiSelect: MultiSelect.extend({ defaultProps: { comboboxProps } }),
+    TagsInput: TagsInput.extend({ defaultProps: { comboboxProps } }),
+    Combobox: Combobox.extend({ defaultProps: comboboxProps, classNames: { dropdown: 'sp-overlay-content' } }),
     Menu: Menu.extend({
       defaultProps: { shadow: undefined },
       classNames: { dropdown: 'sp-overlay-content', item: 'sp-menu-item', divider: 'sp-menu-divider' },

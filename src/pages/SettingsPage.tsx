@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ActionIcon, Button, Group, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core'
-import { IconMinus, IconPlus } from '@tabler/icons-react'
+import { Button, Group, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMembers, useMyId } from '../lib/members.ts'
@@ -73,16 +73,16 @@ export default function SettingsPage() {
       </Stack>
 
       <Stack gap={6}>
-        <Text fw={600} className="sp-label" id="horizon-label">Pre-select next N days</Text>
-        <Group gap="md" role="group" aria-labelledby="horizon-label" wrap="nowrap">
-          <ActionIcon variant="default" size={44} aria-label="Fewer days" disabled={settings.horizonDays <= 1} onClick={() => update({ horizonDays: Math.max(1, settings.horizonDays - 1) })}>
-            <IconMinus size={20} />
-          </ActionIcon>
-          <Text className="sp-stepper-value" fw={700} fz={32} lh={1} ta="center" miw={56} aria-live="polite">{settings.horizonDays}</Text>
-          <ActionIcon variant="default" size={44} aria-label="More days" disabled={settings.horizonDays >= 14} onClick={() => update({ horizonDays: Math.min(14, settings.horizonDays + 1) })}>
-            <IconPlus size={20} />
-          </ActionIcon>
-        </Group>
+        <Stepper
+          label="Pre-select next N days"
+          unit="days"
+          size="lg"
+          min={1}
+          max={14}
+          allowDecimal={false}
+          value={settings.horizonDays}
+          onChange={(v) => { if (v != null && Number.isInteger(v) && v >= 1 && v <= 14) update({ horizonDays: v }) }}
+        />
         <Text size="sm" c="dimmed">Used when you start a shopping trip; you can still add or remove meals.</Text>
       </Stack>
     </Stack>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Accordion, Alert, Badge, Button, Center, Group, Loader, NumberInput, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
+import { Accordion, Alert, Badge, Button, Center, Group, Loader, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -7,6 +7,8 @@ import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables, TablesInsert } from '../lib/database.types.ts'
 import { addDays, replay, stockByIngredient, type Batch, type Day } from '../domain/replay.ts'
+import { Stepper } from '../components/Stepper.tsx'
+import { amountStep } from '../lib/amountStep.ts'
 import UseSoon from './UseSoon.tsx'
 import AddBatch from './AddBatch.tsx'
 import InventoryCheck from './InventoryCheck.tsx'
@@ -17,8 +19,8 @@ type Row = { batch: Batch; amount: number }
 const EPS = 1e-9
 const round1 = (n: number) => Math.round(n * 10) / 10
 const fmt = (day: Day) => dayjs(day).format('D MMM YYYY')
-// NumberInput gives '' when empty; anything else is a number (NaN while typing "-").
-const num = (v: number | string) => (v === '' ? NaN : Number(v))
+// Stepper gives null when empty; anything else is a number (NaN while typing "-").
+const num = (v: number | null) => (v === null ? NaN : v)
 
 const byExpiry = (a: Row, b: Row) =>
   (a.batch.expiresOn ?? '9999').localeCompare(b.batch.expiresOn ?? '9999') ||
@@ -127,8 +129,8 @@ export default function PantryPage() {
 
 function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: Row[] }) {
   const queryClient = useQueryClient()
-  const [used, setUsed] = useState<number | string>('')
-  const [remaining, setRemaining] = useState<number | string>('')
+  const [used, setUsed] = useState<number | null>(null)
+  const [remaining, setRemaining] = useState<number | null>(null)
   const [discarding, setDiscarding] = useState<string | null>(null)
   const soonestId = rows[0]?.batch.id // rows are sorted soonest-expiring first
 
@@ -142,7 +144,6 @@ function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: 
   })
 
   const base = { ingredient_id: ingredient.id }
-  const suffix = ` ${ingredient.unit}`
 
   return (
     <Stack gap="md">
@@ -177,24 +178,26 @@ function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: 
       </Stack>
 
       <Group align="flex-end" wrap="nowrap">
-        <NumberInput label="Used…" min={0.001} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} decimalScale={3} suffix={suffix} value={used} onChange={setUsed} style={{ flex: 1 }} />
+        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Used…" min={0} step={amountStep(ingredient.unit, used)} unit={ingredient.unit} value={used} onChange={setUsed} /></div>
         <Button
           variant="light"
+          h={44}
           disabled={!(num(used) > 0) || record.isPending}
-          onClick={() => record.mutate({ ...base, kind: 'used', qty: num(used), batch_id: null }, { onSuccess: () => setUsed('') })}
+          onClick={() => record.mutate({ ...base, kind: 'used', qty: num(used), batch_id: null }, { onSuccess: () => setUsed(null) })}
         >
           Apply
         </Button>
       </Group>
 
       <Group align="flex-end" wrap="nowrap">
-        <NumberInput label="Set remaining…" min={0} size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} decimalScale={3} suffix={suffix} value={remaining} onChange={setRemaining} style={{ flex: 1 }} />
+        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Set remaining…" min={0} step={amountStep(ingredient.unit, remaining)} unit={ingredient.unit} value={remaining} onChange={setRemaining} /></div>
         <Button
           variant="light"
+          h={44}
           disabled={!(num(remaining) >= 0) || !soonestId || record.isPending}
           onClick={() => {
             if (!soonestId) return
-            record.mutate({ ...base, kind: 'set', qty: num(remaining), batch_id: soonestId }, { onSuccess: () => setRemaining('') })
+            record.mutate({ ...base, kind: 'set', qty: num(remaining), batch_id: soonestId }, { onSuccess: () => setRemaining(null) })
           }}
         >
           Apply

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Alert, Button, Loader, Modal, NumberInput, Radio, Select, Stack, TagsInput, Text } from '@mantine/core'
+import { Alert, Button, Input, Loader, Modal, Radio, SegmentedControl, Select, Stack, TagsInput, Text } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
+import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invalidatePantry } from '../lib/pantry.ts'
@@ -24,7 +25,7 @@ export function useWrite(onDone?: () => void) {
   })
 }
 
-const isPortions = (v: number | string) => typeof v === 'number' && Number.isInteger(v) && v >= 1
+const isPortions = (v: number | null): v is number => v !== null && Number.isInteger(v) && v >= 1
 
 export type Target = { date: string; slot: string }
 
@@ -40,9 +41,9 @@ export function MealModal({
   position: number
   onClose: () => void
 }) {
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [recipeId, setRecipeId] = useState<string | null>(null)
-  const [portions, setPortions] = useState<number | string>(meal?.portions ?? 2)
+  const [portions, setPortions] = useState<number | null>(meal?.portions ?? 2)
   const write = useWrite(onClose)
 
   const recipes = useQuery({
@@ -58,10 +59,10 @@ export function MealModal({
   const canSave = isPortions(portions) && (!!meal || !!recipeId)
   const save = () => {
     if (!isPortions(portions)) return
-    if (meal) write.mutate(supabase.from('planned_meals').update({ portions: Number(portions) }).eq('id', meal.id))
+    if (meal) write.mutate(supabase.from('planned_meals').update({ portions }).eq('id', meal.id))
     else if (recipeId) {
       write.mutate(
-        supabase.from('planned_meals').insert({ ...target, recipe_id: recipeId, portions: Number(portions), position }),
+        supabase.from('planned_meals').insert({ ...target, recipe_id: recipeId, portions, position }),
       )
     }
   }
@@ -86,12 +87,11 @@ export function MealModal({
               }}
             />
           ))}
-        <NumberInput
+        <Stepper
           label="Portions"
           min={1}
-          startValue={1}
+          step={1}
           allowDecimal={false}
-          size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }}
           value={portions}
           onChange={setPortions}
           error={isPortions(portions) ? undefined : 'Whole number, 1 or more'}
@@ -116,7 +116,7 @@ export function MoveCopyModal({
   position: (t: Target) => number
   onClose: () => void
 }) {
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [date, setDate] = useState<string | null>(meal.date)
   const [slot, setSlot] = useState<string | null>(meal.slot)
   const write = useWrite(onClose)
@@ -135,7 +135,9 @@ export function MoveCopyModal({
     <Modal opened onClose={onClose} title={mode === 'move' ? 'Move to…' : 'Copy to…'} fullScreen={isMobile}>
       <Stack>
         <DatePickerInput label="Date" firstDayOfWeek={1} value={date} onChange={setDate} />
-        <Select label="Slot" data={slots} value={slot} onChange={setSlot} allowDeselect={false} />
+        <Input.Wrapper label="Slot">
+          <SegmentedControl fullWidth orientation={slots.length > 3 ? 'vertical' : 'horizontal'} data={slots.includes(meal.slot) ? slots : [...slots, meal.slot]} value={slot ?? ''} onChange={setSlot} />
+        </Input.Wrapper>
         <Button disabled={!date || !slot} loading={write.isPending} onClick={save}>
           {mode === 'move' ? 'Move' : 'Copy'}
         </Button>
@@ -146,7 +148,7 @@ export function MoveCopyModal({
 
 export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [value, setValue] = useState(slots)
   const write = useWrite(() => {
     queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
@@ -174,7 +176,7 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
 
 /** Pick who cooks a meal, or nobody. */
 export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: string | null }; onClose: () => void }) {
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const members = useMembers()
   const [cook, setCook] = useState(meal.cook_id ?? '')
   const write = useWrite(onClose)

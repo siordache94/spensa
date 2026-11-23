@@ -112,12 +112,16 @@ body {
 .sp-checkbox-input { border: 2px solid var(--sp-edge); background: transparent; }
 .sp-checkbox-input:checked, .sp-checkbox-input:indeterminate { background: var(--sp-yellow); border-color: var(--sp-yellow); }
 
-/* SegmentedControl */
+/* SegmentedControl: selected = yellow fill + ink; unselected = text2 on panel; disabled stays readable */
 .sp-seg-root { background: var(--sp-panel); border: 1px solid var(--sp-rule); padding: 3px; }
 .sp-seg-indicator { background: var(--sp-yellow); box-shadow: none; }
 .sp-seg-label { color: var(--sp-text2); font-weight: 500; min-height: 40px; display: flex; align-items: center; justify-content: center; }
-.sp-seg-label[data-active] { color: var(--sp-ink); font-weight: 700; }
-.sp-seg-label:hover:not([data-active]) { color: var(--sp-text); }
+.sp-seg-label[data-active], input:checked + .sp-seg-label { color: var(--sp-ink); font-weight: 700; }
+.sp-seg-label[data-disabled] { color: var(--sp-text2); cursor: not-allowed; }
+.sp-seg-label[data-disabled]:is(input:checked + *) { color: var(--sp-ink); }
+.sp-seg-label:hover:not([data-active]):not([data-disabled]) { color: var(--sp-text); }
+.sp-seg-root[data-disabled] .sp-seg-indicator { background: var(--sp-yellow); opacity: 1; }
+.sp-seg-root[data-disabled] { border-style: dashed; }
 
 /* Badge: caps label voice */
 .sp-badge { font-family: var(--sp-label); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -136,7 +140,7 @@ body {
 .sp-button { font-weight: 600; }
 
 /* Figure columns only */
-.sp-num, .sp-seg-cell > span, .sp-qty, .sp-stepper-value, .mantine-NumberInput-input { font-variant-numeric: tabular-nums lining-nums; }
+.sp-num, .sp-seg-cell > span, .sp-qty, .sp-stepper-value, .sp-stepper-input { font-variant-numeric: tabular-nums lining-nums; }
 
 /* Who cooks: small caps chip on a planned meal */
 .sp-cook {
@@ -154,3 +158,44 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Stepper: thumb-sized - / + around a typeable figure */
+.sp-stepper { display: flex; align-items: center; gap: 8px; }
+.sp-stepper > .mantine-ActionIcon-root { flex: none; border-color: var(--sp-edge); }
+.sp-stepper[data-size='lg'] > .mantine-ActionIcon-root { width: 52px; height: 52px; }
+.sp-stepper-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 8px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-edge);
+  border-radius: var(--mantine-radius-sm);
+}
+.sp-stepper[data-size='lg'] .sp-stepper-field { height: 52px; }
+.sp-stepper-field:focus-within { border-color: var(--sp-focus); outline: 1px solid var(--sp-focus); }
+.sp-stepper[data-error] .sp-stepper-field { border-color: var(--sp-red); }
+.sp-stepper-input {
+  flex: 0 1 auto;
+  width: 6ch;
+  min-width: 2ch;
+  align-self: center;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  text-align: right;
+  color: var(--sp-text);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.sp-stepper[data-size='lg'] .sp-stepper-input { font-size: 30px; width: 4ch; }
+.sp-stepper-field:not([data-unit]) .sp-stepper-input { width: 100%; text-align: center; }
+.sp-stepper-input::placeholder { color: var(--sp-text2); }
+.sp-stepper-unit { color: var(--sp-text2); font-size: 14px; font-weight: 500; align-self: center; white-space: nowrap; }

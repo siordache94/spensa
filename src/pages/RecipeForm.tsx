@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Button, Center, CloseButton, Group, Input, Loader, Modal, NumberInput, SegmentedControl, Select, Stack, TagsInput, Text, Textarea, TextInput } from '@mantine/core'
+import { Alert, Button, Center, CloseButton, Group, Input, Loader, Modal, SegmentedControl, Select, Stack, TagsInput, Text, Textarea, TextInput } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
+import { Stepper } from '../components/Stepper.tsx'
+import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
@@ -18,11 +20,11 @@ const UNITS: { value: Unit; label: string }[] = [
   { value: 'to_taste', label: 'to taste' },
 ]
 
-// One recipe line. amount is for `serves` servings, as typed; '' when empty.
+// One recipe line. amount is for `serves` servings, as typed; null when empty.
 type Line = {
   key: number
   ingredientId: string | null
-  amount: number | string
+  amount: number | null
   query: string // the Select's search text
   creating: boolean // inline picker for a new ingredient is open
   newUnit: Unit
@@ -30,7 +32,7 @@ type Line = {
 
 let lastKey = 0
 function newLine(patch: Partial<Line> = {}): Line {
-  return { key: ++lastKey, ingredientId: null, amount: '', query: '', creating: false, newUnit: 'g', ...patch }
+  return { key: ++lastKey, ingredientId: null, amount: null, query: '', creating: false, newUnit: 'g', ...patch }
 }
 
 async function fetchIngredients(): Promise<Ingredient[]> {
@@ -46,7 +48,7 @@ type Props = {
 
 export default function RecipeForm({ recipe, onClose }: Props) {
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
 
   const [name, setName] = useState(recipe?.name ?? '')
   const [tags, setTags] = useState<string[]>(recipe?.tags ?? [])
@@ -56,7 +58,7 @@ export default function RecipeForm({ recipe, onClose }: Props) {
     recipe
       ? recipe.recipe_ingredients.map((ri) => newLine({
           ingredientId: ri.ingredient_id,
-          amount: ri.qty_per_portion === null ? '' : Math.round(ri.qty_per_portion * recipe.serves * 1000) / 1000,
+          amount: ri.qty_per_portion === null ? null : Math.round(ri.qty_per_portion * recipe.serves * 1000) / 1000,
         }))
       : [],
   )
@@ -171,26 +173,20 @@ export default function RecipeForm({ recipe, onClose }: Props) {
                         onChange={(ingredientId) => updateLine(line.key, { ingredientId, query: '' })}
                         style={{ flex: 1, minWidth: 0 }}
                       />
-                      {unit && unit !== 'to_taste' && (
-                        <NumberInput
-                          aria-label="Amount"
-                          placeholder="Amount"
-                          min={0.001}
-                          startValue={1}
-                          clampBehavior="none"
-                          size="md"
-                          rightSectionWidth={44}
-                          styles={{ control: { width: 36, height: '50%' } }}
-                          required
-                          w={130}
-                          suffix={` ${unit}`}
-                          value={line.amount}
-                          onChange={(amount) => updateLine(line.key, { amount })}
-                          error={typeof line.amount === 'number' && !(line.amount > 0) ? 'Must be more than 0' : undefined}
-                        />
-                      )}
-                      <CloseButton aria-label="Remove ingredient" mt={6} onClick={() => removeLine(line.key)} />
+                      <CloseButton aria-label="Remove ingredient" size={36} mt={4} onClick={() => removeLine(line.key)} />
                     </Group>
+
+                    {unit && unit !== 'to_taste' && (
+                      <Stepper
+                        aria-label="Amount"
+                        min={0}
+                        step={amountStep(unit, line.amount)}
+                        unit={unit}
+                        value={line.amount}
+                        onChange={(amount) => updateLine(line.key, { amount })}
+                        error={line.amount !== null && !(line.amount > 0) ? 'Must be more than 0' : undefined}
+                      />
+                    )}
 
                     {offerCreate && !line.creating && (
                       <Button variant="light" size="xs" w="fit-content" onClick={() => updateLine(line.key, { creating: true, newUnit: 'g' })}>

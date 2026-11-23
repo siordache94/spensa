@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Alert, Button, Modal, NumberInput, Select, Stack } from '@mantine/core'
+import { Alert, Button, Modal, Select, Stack } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
+import { Stepper } from '../components/Stepper.tsx'
+import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { invalidatePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
@@ -16,14 +18,14 @@ type Props = {
   onClose: () => void
 }
 
-// NumberInput gives '' when empty; anything else is a number (NaN while typing "-").
-const num = (v: number | string) => (v === '' ? NaN : Number(v))
+// Stepper gives null when empty; anything else is a number (NaN while typing "-").
+const num = (v: number | null) => (v === null ? NaN : v)
 
 export default function AddBatch({ ingredients, today, onClose }: Props) {
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const [ingredientId, setIngredientId] = useState<string | null>(null)
-  const [qty, setQty] = useState<number | string>('')
+  const [qty, setQty] = useState<number | null>(null)
   const [expiry, setExpiry] = useState<string | null>(null)
 
   const selected = ingredients.find((i) => i.id === ingredientId)
@@ -33,7 +35,7 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
   function pick(id: string | null) {
     const i = ingredients.find((x) => x.id === id)
     setIngredientId(id)
-    setQty(i?.pack_size ?? '')
+    setQty(i?.pack_size ?? null)
     setExpiry(i?.shelf_life_days ? addDays(today, i.shelf_life_days) : null)
   }
 
@@ -69,17 +71,14 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
           value={ingredientId}
           onChange={pick}
         />
-        <NumberInput
+        <Stepper
           label="Quantity"
-          required
-          min={0.001}
-          startValue={1}
-          clampBehavior="none"
-          decimalScale={3}
-          size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }}
-          suffix={selected ? ` ${selected.unit}` : undefined}
+          min={0}
+          step={amountStep(selected?.unit, qty)}
+          unit={selected?.unit}
           value={qty}
           onChange={setQty}
+          error={qty !== null && !(qty > 0) ? 'Must be more than 0' : undefined}
         />
         <DatePickerInput
           label="Expires"

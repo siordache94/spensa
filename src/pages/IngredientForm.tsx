@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Input, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Autocomplete, Button, Input, Modal, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
+import { Stepper } from '../components/Stepper.tsx'
+import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables, TablesInsert } from '../lib/database.types.ts'
@@ -17,10 +19,6 @@ const UNITS: { value: Unit; label: string }[] = [
 
 const DEFAULT_CATEGORIES = ['produce', 'dairy', 'meat', 'fish', 'dry goods', 'frozen', 'other']
 
-// NumberInput gives '' when empty; anything else is a number (NaN while typing "-").
-function parse(value: number | string): number | null {
-  return value === '' ? null : Number(value)
-}
 
 type Props = {
   ingredient: Ingredient | null // null = adding
@@ -30,14 +28,14 @@ type Props = {
 
 export default function IngredientForm({ ingredient, categories, onClose }: Props) {
   const queryClient = useQueryClient()
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
 
   const [name, setName] = useState(ingredient?.name ?? '')
   const [unit, setUnit] = useState<Unit>(ingredient?.unit ?? 'g')
   const [category, setCategory] = useState(ingredient?.category ?? '')
-  const [pack, setPack] = useState<number | string>(ingredient?.pack_size ?? '')
-  const [shelf, setShelf] = useState<number | string>(ingredient?.shelf_life_days ?? '')
-  const [min, setMin] = useState<number | string>(ingredient?.min_stock ?? '')
+  const [pack, setPack] = useState<number | null>(ingredient?.pack_size ?? null)
+  const [shelf, setShelf] = useState<number | null>(ingredient?.shelf_life_days ?? null)
+  const [min, setMin] = useState<number | null>(ingredient?.min_stock ?? null)
   const [confirming, setConfirming] = useState(false)
 
   const usage = useQuery({
@@ -57,9 +55,9 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const inUse = usedIn.length > 0
 
   const toTaste = unit === 'to_taste'
-  const packValue = parse(pack)
-  const shelfValue = parse(shelf)
-  const minValue = parse(min)
+  const packValue = pack
+  const shelfValue = shelf
+  const minValue = min
   const packError = packValue !== null && !(packValue > 0) ? 'Must be more than 0' : undefined
   const shelfError = shelfValue !== null && !(Number.isInteger(shelfValue) && shelfValue > 0) ? 'Whole days, more than 0' : undefined
   const minError = minValue !== null && !(minValue >= 0) ? 'Must be 0 or more' : undefined
@@ -122,14 +120,20 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
           <TextInput label="Name" required value={name} onChange={(e) => setName(e.currentTarget.value)} />
 
-          <Input.Wrapper label="Unit" description={inUse ? 'Locked while recipes use this ingredient.' : undefined}>
+          <Input.Wrapper label="Unit">
             <SegmentedControl
               fullWidth
               data={UNITS}
               value={unit}
               onChange={(value) => setUnit(value as Unit)}
               disabled={inUse}
+              aria-describedby={inUse ? 'unit-locked' : undefined}
             />
+            {inUse && (
+              <Text id="unit-locked" size="sm" c="dimmed" mt={6}>
+                Locked: used in {usedIn.length} {usedIn.length === 1 ? 'recipe' : 'recipes'}. Remove it from {usedIn.length === 1 ? 'that recipe' : 'those recipes'} to change the unit.
+              </Text>
+            )}
           </Input.Wrapper>
 
           <Autocomplete
@@ -142,9 +146,9 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
           {!toTaste && (
             <>
-              <NumberInput label="Pack size" min={0.001} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix={` ${suffix}`} value={pack} onChange={setPack} error={packError} decimalScale={3} />
-              <NumberInput label="Shelf life" min={1} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix=" days" value={shelf} onChange={setShelf} error={shelfError} allowDecimal={false} />
-              <NumberInput label="Min stock" min={0} size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix={` ${suffix}`} value={min} onChange={setMin} error={minError} decimalScale={3} />
+              <Stepper label="Pack size" description="Optional" min={0} step={amountStep(unit, pack)} unit={suffix} value={pack} onChange={setPack} error={packError} />
+              <Stepper label="Shelf life" description="Optional" min={0} step={1} unit="days" allowDecimal={false} value={shelf} onChange={setShelf} error={shelfError} />
+              <Stepper label="Min stock" description="Optional" min={0} step={amountStep(unit, min)} unit={suffix} value={min} onChange={setMin} error={minError} />
             </>
           )}
 
