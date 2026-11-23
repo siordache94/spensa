@@ -27,6 +27,8 @@ Cloudflare builds from GitHub on every push to `main`:
   - `VITE_SUPABASE_ANON_KEY` (hosted project's publishable key)
   - `NODE_VERSION=22`
 
+Hosted Google sign-in is configured in the Supabase dashboard (Authentication → Providers → Google) with the client from Google Cloud. The Google OAuth client's redirect URI is the hosted project's `/auth/v1/callback`.
+
 Database: hosted Supabase project, connected through the Supabase GitHub integration. Every migration in `supabase/migrations` is applied automatically when `main` changes. Do not run `supabase db push` by hand.
 
 Local production build: put the hosted values in `.env.production.local` (gitignored; Vite reads it only for `npm run build`). `.env.local` keeps the local stack for `npm run dev`.

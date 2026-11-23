@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Button, Center, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Center, Divider, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
 import { supabase } from '../lib/supabase.ts'
 
 export default function AuthPage() {
@@ -8,6 +8,15 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  async function signInWithGoogle() {
+    setError(null)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href },
+    })
+    if (error) setError(error.message)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -34,6 +43,10 @@ export default function AuthPage() {
           <Stack>
             <Title order={2}>{signingIn ? 'Sign in' : 'Create account'}</Title>
             {error && <Alert color="red">{error}</Alert>}
+            <Button type="button" variant="default" onClick={signInWithGoogle}>
+              Continue with Google
+            </Button>
+            <Divider label="or" labelPosition="center" />
             <TextInput
               label="Email"
               type="email"
@@ -44,7 +57,7 @@ export default function AuthPage() {
             <PasswordInput
               label="Password"
               autoComplete={signingIn ? 'current-password' : 'new-password'}
-              description="At least 8 characters"
+              description={signingIn ? undefined : 'At least 8 characters'}
               value={password}
               onChange={(e) => setPassword(e.currentTarget.value)}
             />
