@@ -85,6 +85,7 @@ export default function SettingsPage() {
         />
         <Text size="sm" c="dimmed">Used when you start a shopping trip; you can still add or remove meals.</Text>
       </Stack>
+      <Text size="xs" c="dimmed">Build {__BUILD__}</Text>
     </Stack>
   )
 }
