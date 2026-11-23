@@ -1,25 +1,19 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text, Title, UnstyledButton } from '@mantine/core'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Alert, Autocomplete, Badge, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
-import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
+import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, SHOP_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
+import { addDays, replay, shoppingList, type Need } from '../domain/replay.ts'
 
 type Unit = Tables<'ingredients'>['unit']
 
-// A purchase: becomes a batch, and removes the manual item it came from.
-type Buy = {
-  ingredientId: string
-  name: string
-  unit: Unit
-  qty: number
-  expiresOn: Day | null
-  shoppingItemId?: string
-}
+// What the UI builds; ticking adds the batch id and time (see shopMutations.ts).
+type Buy = Omit<BuyVars, 'batchId' | 'addedAt'>
 
 // One row on the list. `buy` is set for rows with a quantity (tap the label to change it).
 type Entry = {
@@ -31,6 +25,7 @@ type Entry = {
   onTick: () => void
 }
 
+const withIds = (b: Buy): BuyVars => ({ ...b, batchId: crypto.randomUUID(), addedAt: new Date().toISOString() })
 const round1 = (n: number) => Math.round(n * 10) / 10
 const round3 = (n: number) => Math.round(n * 1000) / 1000
 const dayOf = (v: DateValue) => (v ? dayjs(v).format('YYYY-MM-DD') : null)
@@ -94,6 +89,23 @@ export default function ShopPage() {
     },
   })
 
+  // Live sync: any change from the other phone refreshes the list.
+  useEffect(() => {
+    const channel = supabase.channel('shopping')
+    for (const table of ['batches', 'ingredients', 'shopping_items']) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+        invalidatePantry(queryClient)
+        queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
+      })
+    }
+    channel.subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [queryClient])
+
+  const waiting = useMutationState({ filters: { mutationKey: SHOP_KEY }, select: (m) => m.state.isPaused }).filter(Boolean).length
+
   const [picked, setPicked] = useState<[DateValue, DateValue] | null>(null)
   const [text, setText] = useState('')
   const [buying, setBuying] = useState<Buy | null>(null)
@@ -117,48 +129,10 @@ export default function ShopPage() {
   const invalidateItems = () => queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
   const showError = (e: Error) => notifications.show({ color: 'red', message: e.message })
 
-  const buy = useMutation({
-    mutationFn: async (b: Buy) => {
-      if (b.shoppingItemId) {
-        const { error } = await supabase.rpc('buy_shopping_item', {
-          item_id: b.shoppingItemId,
-          qty: b.qty,
-          // Generated types omit null for date args; the RPC takes null to mean "no expiry".
-          expires_on: b.expiresOn as string,
-        })
-        if (error) throw new Error(error.message)
-        return
-      }
-      const { error } = await supabase
-        .from('batches')
-        .insert({ ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn })
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => setBuying(null),
-    onSettled: (_data, _error, b) => {
-      invalidatePantry(queryClient)
-      if (b.shoppingItemId) invalidateItems()
-    },
-    onError: showError,
-  })
-
-  const markOnHand = useMutation({
-    mutationFn: async (ingredientId: string) => {
-      const { error } = await supabase.from('ingredients').update({ on_hand: true }).eq('id', ingredientId)
-      if (error) throw new Error(error.message)
-    },
-    onSettled: () => invalidatePantry(queryClient),
-    onError: showError,
-  })
-
-  const checkText = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('shopping_items').update({ checked: true }).eq('id', id)
-      if (error) throw new Error(error.message)
-    },
-    onSettled: () => invalidateItems(),
-    onError: showError,
-  })
+  const buy = useMutation<void, Error, BuyVars>({ mutationKey: BUY_KEY })
+  const markOnHand = useMutation<void, Error, string>({ mutationKey: ON_HAND_KEY })
+  const checkText = useMutation<void, Error, string>({ mutationKey: CHECK_KEY })
+  const { mutate: mutateBuy } = buy
 
   const clearChecked = useMutation({
     mutationFn: async () => {
@@ -197,7 +171,6 @@ export default function ShopPage() {
     onError: showError,
   })
 
-  const { mutate: mutateBuy } = buy
   const { mutate: mutateOnHand } = markOnHand
   const { mutate: mutateCheck } = checkText
 
@@ -228,7 +201,7 @@ export default function ShopPage() {
         category: ing.category,
         detail: `${amount(n.qty, ing.unit)}${packs}`,
         buy: b,
-        onTick: () => mutateBuy(b),
+        onTick: () => mutateBuy(withIds(b)),
       })
     }
 
@@ -250,7 +223,7 @@ export default function ShopPage() {
           category: item.ingredients.category,
           detail: item.qty ? amount(item.qty, item.ingredients.unit) : null,
           buy: b,
-          onTick: () => mutateBuy(b),
+          onTick: () => mutateBuy(withIds(b)),
         })
       } else if (!item.checked) {
         out.push({ key: `item-${item.id}`, name: item.text ?? '', category: null, detail: null, onTick: () => mutateCheck(item.id) })
@@ -276,8 +249,6 @@ export default function ShopPage() {
   if (failure) return <Alert color="red">{failure.message}</Alert>
   if (pantry.isPending || items.isPending) return <Center py="xl"><Loader /></Center>
 
-  const busy = buy.isPending || markOnHand.isPending || checkText.isPending
-
   function submitItem(e: FormEvent) {
     e.preventDefault()
     const value = text.trim()
@@ -287,6 +258,7 @@ export default function ShopPage() {
   return (
     <Stack>
       <Title order={2}>Shop</Title>
+      {waiting > 0 && <Badge color="orange" size="lg">Offline — {waiting} {waiting === 1 ? 'tick' : 'ticks'} waiting</Badge>}
 
       <DatePickerInput
         type="range"
@@ -322,7 +294,7 @@ export default function ShopPage() {
           </Text>
           {rows.map((e) => (
             <Group key={e.key} wrap="nowrap" gap="md" py="sm" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-              <Checkbox size="xl" aria-label={`Bought ${e.name}`} checked={false} disabled={busy} onChange={() => e.onTick()} />
+              <Checkbox size="xl" aria-label={`Bought ${e.name}`} checked={false} onChange={() => e.onTick()} />
               <UnstyledButton flex={1} style={{ textAlign: 'left' }} onClick={() => e.buy && setBuying(e.buy)}>
                 <Text fw={500} size="lg">{e.name}</Text>
                 {e.detail && <Text size="sm" c="dimmed">{e.detail}</Text>}
@@ -353,7 +325,7 @@ export default function ShopPage() {
       </Button>
 
       {buying && (
-        <BuyModal key={buying.shoppingItemId ?? buying.ingredientId} buy={buying} pending={buy.isPending} onBuy={(b) => buy.mutate(b)} onClose={() => setBuying(null)} />
+        <BuyModal key={buying.shoppingItemId ?? buying.ingredientId} buy={buying} pending={false} onBuy={(b) => { mutateBuy(withIds(b)); setBuying(null) }} onClose={() => setBuying(null)} />
       )}
 
       <Modal opened={snapshotOpen} onClose={() => setSnapshotOpen(false)} title="Is the rest of the pantry right?">
