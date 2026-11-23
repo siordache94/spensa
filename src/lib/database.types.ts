@@ -312,6 +312,9 @@ isOneToOne: false
 "my_household":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"save_inventory_check":
+{ Args: { "items": Json,"on_date": string }; Returns: string
+                           },
 "save_recipe":
 { Args: { "instructions": string,"lines": Json,"name": string,"recipe_id": string,"serves": number,"tags": (string)[] }; Returns: string
                            },
