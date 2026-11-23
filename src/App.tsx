@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { AppShell, Alert, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
+import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
 import { NavLink, Route, Routes } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
+import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from './lib/supabase.ts'
 import AuthPage from './pages/AuthPage.tsx'
 import HouseholdPage from './pages/HouseholdPage.tsx'
@@ -47,6 +48,7 @@ async function fetchHousehold(): Promise<Household | null> {
 
 function HouseholdMenu({ household }: { household: Household }) {
   const queryClient = useQueryClient()
+  const inviteUrl = `${window.location.origin}/?invite=${household.invite_code}`
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -71,6 +73,12 @@ function HouseholdMenu({ household }: { household: Household }) {
             )}
           </CopyButton>
         </Group>
+        <Stack align="center" gap="xs" px="sm" pb="xs">
+          <Box bg="white" p="sm" style={{ borderRadius: 'var(--mantine-radius-sm)' }}>
+            <QRCodeSVG value={inviteUrl} size={180} />
+          </Box>
+          <Text size="xs" c="dimmed">Scan to join</Text>
+        </Stack>
         <Menu.Divider />
         <Menu.Item onClick={signOut}>Sign out</Menu.Item>
       </Menu.Dropdown>

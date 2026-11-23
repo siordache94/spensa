@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.ts'
 export default function HouseholdPage() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -16,6 +16,7 @@ export default function HouseholdPage() {
     const { error } = await call()
     setBusy(false)
     if (error) return setError(error.message)
+    window.history.replaceState(null, '', window.location.pathname)
     await queryClient.invalidateQueries({ queryKey: ['household'] })
   }
 
