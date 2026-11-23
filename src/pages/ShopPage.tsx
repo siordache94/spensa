@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { IconPencil } from '@tabler/icons-react'
@@ -405,9 +405,13 @@ export default function ShopPage() {
   }
 
   function acknowledge(id: string) {
-    const next = [...acked, id]
-    setAcked(next)
-    saveAcked(next)
+    // functional update: auto-acks fire from timers and must not drop each other
+    setAcked((a) => {
+      if (a.includes(id)) return a
+      const next = [...a, id]
+      saveAcked(next)
+      return next
+    })
   }
 
   if (!trip || editing || !range) {
@@ -492,7 +496,7 @@ export default function ShopPage() {
               </span>
               <Figure figure={c.figure} unit={c.unit} free={c.free} />
               <span />
-              {c.held && <button type="button" className="sp-ack" aria-label={`Acknowledge ${c.name}, ticked by partner`} onClick={() => acknowledge(c.id)} />}
+              {c.held && <AckButton name={c.name} onAck={() => acknowledge(c.id)} />}
             </div>
           ))}
         </div>
@@ -537,4 +541,21 @@ export default function ShopPage() {
       </Modal>
     </div>
   )
+}
+
+/** Covers a partner-ticked row: a tap acknowledges it, and so does staying on screen for a few seconds. */
+function AckButton({ name, onAck }: { name: string; onAck: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const ack = useRef(onAck)
+  ack.current = onAck
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const io = new IntersectionObserver(([e]) => {
+      clearTimeout(timer)
+      if (e.isIntersecting) timer = setTimeout(() => ack.current(), 3000)
+    }, { threshold: 0.6 })
+    if (ref.current) io.observe(ref.current)
+    return () => { io.disconnect(); clearTimeout(timer) }
+  }, [])
+  return <button ref={ref} type="button" className="sp-ack" aria-label={`Acknowledge ${name}, ticked by partner`} onClick={onAck} />
 }
