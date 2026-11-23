@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
+import { AppShell, Alert, Box, Button, Center, CopyButton, Flex, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
+import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconFridge, IconShoppingCart } from '@tabler/icons-react'
 import { NavLink, Route, Routes } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
@@ -14,27 +15,31 @@ import PantryPage from './pages/PantryPage.tsx'
 import ShopPage from './pages/ShopPage.tsx'
 import IngredientsPage from './pages/IngredientsPage.tsx'
 
-const navItems = [
-  { to: '/', label: 'Plan', end: true },
-  { to: '/recipes', label: 'Recipes', end: false },
-  { to: '/pantry', label: 'Pantry', end: false },
-  { to: '/shop', label: 'Shop', end: false },
-  { to: '/ingredients', label: 'Ingredients', end: false },
+const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
+  { to: '/', label: 'Plan', end: true, icon: IconCalendarWeek },
+  { to: '/recipes', label: 'Recipes', end: false, icon: IconChefHat },
+  { to: '/pantry', label: 'Pantry', end: false, icon: IconFridge },
+  { to: '/shop', label: 'Shop', end: false, icon: IconShoppingCart },
+  { to: '/ingredients', label: 'Ingredients', end: false, icon: IconCarrot },
 ]
 
-function NavButton({ to, label, end, fullWidth }: (typeof navItems)[number] & { fullWidth?: boolean }) {
+function NavButton({ to, label, end, icon: NavIcon, fullWidth }: (typeof navItems)[number] & { fullWidth?: boolean }) {
   return (
-    <NavLink to={to} end={end} style={{ textDecoration: 'none', flex: fullWidth ? undefined : 1 }}>
-      {({ isActive }) => (
-        <Button
-          component="span"
-          variant={isActive ? 'light' : 'subtle'}
-          fullWidth
-          justify={fullWidth ? 'flex-start' : 'center'}
-        >
-          {label}
-        </Button>
-      )}
+    <NavLink to={to} end={end} style={{ textDecoration: 'none', flex: fullWidth ? undefined : 1, minWidth: 0 }}>
+      {({ isActive }) =>
+        fullWidth ? (
+          <Button component="span" variant={isActive ? 'light' : 'subtle'} fullWidth justify="flex-start" leftSection={<NavIcon size={18} />}>
+            {label}
+          </Button>
+        ) : (
+          <Button component="span" variant={isActive ? 'light' : 'subtle'} fullWidth h={56} px={4}>
+            <Flex component="span" direction="column" align="center" gap={2}>
+              <NavIcon size={22} />
+              <Text component="span" fz={11} lh={1} style={{ whiteSpace: 'nowrap' }}>{label}</Text>
+            </Flex>
+          </Button>
+        )
+      }
     </NavLink>
   )
 }
@@ -114,7 +119,7 @@ function Shell({ household }: { household: Household }) {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 200, breakpoint: 'sm', collapsed: { mobile: true } }}
-      footer={{ height: { base: 64, sm: 0 } }}
+      footer={{ height: { base: 68, sm: 0 } }}
       padding="md"
     >
       <AppShell.Header>
@@ -142,7 +147,7 @@ function Shell({ household }: { household: Household }) {
         </Routes>
       </AppShell.Main>
 
-      <AppShell.Footer hiddenFrom="sm" p="xs">
+      <AppShell.Footer hiddenFrom="sm" px="xs" py={6}>
         <Group grow gap="xs" h="100%" wrap="nowrap">
           {navItems.map((item) => (
             <NavButton key={item.to} {...item} />

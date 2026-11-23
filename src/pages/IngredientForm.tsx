@@ -142,9 +142,9 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
           {!toTaste && (
             <>
-              <NumberInput label="Pack size" placeholder="Optional" suffix={` ${suffix}`} value={pack} onChange={setPack} error={packError} decimalScale={3} />
-              <NumberInput label="Shelf life" placeholder="Optional" suffix=" days" value={shelf} onChange={setShelf} error={shelfError} allowDecimal={false} />
-              <NumberInput label="Min stock" placeholder="Optional" suffix={` ${suffix}`} value={min} onChange={setMin} error={minError} decimalScale={3} />
+              <NumberInput label="Pack size" min={0.001} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix={` ${suffix}`} value={pack} onChange={setPack} error={packError} decimalScale={3} />
+              <NumberInput label="Shelf life" min={1} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix=" days" value={shelf} onChange={setShelf} error={shelfError} allowDecimal={false} />
+              <NumberInput label="Min stock" min={0} size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} placeholder="Optional" suffix={` ${suffix}`} value={min} onChange={setMin} error={minError} decimalScale={3} />
             </>
           )}
 

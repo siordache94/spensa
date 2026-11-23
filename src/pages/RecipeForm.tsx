@@ -175,6 +175,12 @@ export default function RecipeForm({ recipe, onClose }: Props) {
                         <NumberInput
                           aria-label="Amount"
                           placeholder="Amount"
+                          min={0.001}
+                          startValue={1}
+                          clampBehavior="none"
+                          size="md"
+                          rightSectionWidth={44}
+                          styles={{ control: { width: 36, height: '50%' } }}
                           required
                           w={130}
                           suffix={` ${unit}`}

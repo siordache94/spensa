@@ -88,7 +88,9 @@ export function MealModal({
         <NumberInput
           label="Portions"
           min={1}
+          startValue={1}
           allowDecimal={false}
+          size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }}
           value={portions}
           onChange={setPortions}
           error={isPortions(portions) ? undefined : 'Whole number, 1 or more'}

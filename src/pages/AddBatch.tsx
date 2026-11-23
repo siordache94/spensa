@@ -72,8 +72,11 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
         <NumberInput
           label="Quantity"
           required
-          min={0}
+          min={0.001}
+          startValue={1}
+          clampBehavior="none"
           decimalScale={3}
+          size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }}
           suffix={selected ? ` ${selected.unit}` : undefined}
           value={qty}
           onChange={setQty}

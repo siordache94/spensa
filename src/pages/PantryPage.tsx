@@ -177,7 +177,7 @@ function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: 
       </Stack>
 
       <Group align="flex-end" wrap="nowrap">
-        <NumberInput label="Used…" min={0} decimalScale={3} suffix={suffix} value={used} onChange={setUsed} style={{ flex: 1 }} />
+        <NumberInput label="Used…" min={0.001} startValue={1} clampBehavior="none" size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} decimalScale={3} suffix={suffix} value={used} onChange={setUsed} style={{ flex: 1 }} />
         <Button
           variant="light"
           disabled={!(num(used) > 0) || record.isPending}
@@ -188,7 +188,7 @@ function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: 
       </Group>
 
       <Group align="flex-end" wrap="nowrap">
-        <NumberInput label="Set remaining…" min={0} decimalScale={3} suffix={suffix} value={remaining} onChange={setRemaining} style={{ flex: 1 }} />
+        <NumberInput label="Set remaining…" min={0} size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }} decimalScale={3} suffix={suffix} value={remaining} onChange={setRemaining} style={{ flex: 1 }} />
         <Button
           variant="light"
           disabled={!(num(remaining) >= 0) || !soonestId || record.isPending}

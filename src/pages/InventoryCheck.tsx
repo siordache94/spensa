@@ -60,6 +60,7 @@ export default function InventoryCheck({ groups, today, onClose }: Props) {
                 label={`Added ${fmt(r.batch.addedOn)} · ${r.batch.expiresOn ? `expires ${fmt(r.batch.expiresOn)}` : 'no expiry'}`}
                 min={0}
                 decimalScale={3}
+                size="md" rightSectionWidth={44} styles={{ control: { width: 36, height: '50%' } }}
                 suffix={` ${g.ingredient.unit}`}
                 value={qtys[r.batch.id]}
                 onChange={(v) => setQtys((prev) => ({ ...prev, [r.batch.id]: v }))}
