@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text } from '@mantine/core'
+import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Modal, Stack, Text } from '@mantine/core'
 import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconChevronDown, IconFridge, IconSettings, IconShoppingCart } from '@tabler/icons-react'
 import { Link, NavLink, Route, Routes } from 'react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAuthApiError, type Session } from '@supabase/supabase-js'
 import { QRCodeSVG } from 'qrcode.react'
 import { notifications } from '@mantine/notifications'
@@ -53,6 +53,19 @@ function HouseholdMenu({ household }: { household: Household }) {
   const queryClient = useQueryClient()
   const inviteUrl = `${window.location.origin}/?invite=${household.invite_code}`
 
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const rotate = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('rotate_invite_code')
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['household'] })
+      setConfirmOpen(false)
+    },
+    onError: (err) => notifications.show({ color: 'red', title: 'Could not change the invite code', message: err.message }),
+  })
+
   async function signOut() {
     await supabase.auth.signOut()
     queryClient.clear()
@@ -68,6 +81,16 @@ function HouseholdMenu({ household }: { household: Household }) {
   }
 
   return (
+    <>
+    <Modal opened={confirmOpen} onClose={() => setConfirmOpen(false)} title="New invite code?" centered>
+      <Stack>
+        <Text size="sm">The current code, link and QR stop working. People already in the household stay in.</Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button loading={rotate.isPending} onClick={() => rotate.mutate()}>New invite code</Button>
+        </Group>
+      </Stack>
+    </Modal>
     <Menu position="bottom-end" width={260} shadow="md">
       <Menu.Target>
         <Button variant="subtle" className="sp-hh" rightSection={<IconChevronDown size={16} stroke={1.75} />} aria-label={`Household menu: ${household.name}`}>
@@ -106,11 +129,15 @@ function HouseholdMenu({ household }: { household: Household }) {
             )}
           </Group>
         </Stack>
+        <Group px="sm" pb="xs">
+          <Button size="compact-sm" variant="subtle" color="gray" onClick={() => setConfirmOpen(true)}>New invite code</Button>
+        </Group>
         <Menu.Divider />
         <Menu.Item component={Link} to="/settings" leftSection={<IconSettings size={18} stroke={1.75} />}>Settings</Menu.Item>
         <Menu.Item onClick={signOut}>Sign out</Menu.Item>
       </Menu.Dropdown>
     </Menu>
+    </>
   )
 }
 

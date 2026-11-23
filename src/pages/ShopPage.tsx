@@ -11,6 +11,7 @@ import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
+import { toBuy } from '../lib/shopList.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
 import { useSettings } from '../lib/settings.ts'
@@ -283,7 +284,7 @@ export default function ShopPage() {
       const batches = [...remaining]
         .filter(([, qty]) => qty > 0)
         .map(([batchId, qty]) => ({ batch_id: batchId, qty: round3(qty) }))
-      const { error } = await supabase.rpc('save_snapshot', { on_date: today, batches })
+      const { error } = await supabase.rpc('finish_shopping', { on_date: today, batches })
       if (error) throw new Error(error.message)
     },
     onSuccess: () => { setSnapshotOpen(false); setEditing(false); updateTrip(null) },
@@ -327,7 +328,7 @@ export default function ShopPage() {
       })
     }
 
-    for (const item of items.data ?? []) {
+    for (const item of toBuy(items.data ?? [])) {
       if (item.ingredient_id) {
         const ing = byId.get(item.ingredient_id)
         if (!ing || !item.ingredients) continue

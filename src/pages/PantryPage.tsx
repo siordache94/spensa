@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ActionIcon, Alert, Button, Center, Group, Loader, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
+import { ActionIcon, Alert, Button, Center, Group, Loader, Menu, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -8,6 +8,7 @@ import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
 import { addDays, replay, stockByIngredient, type Day } from '../domain/replay.ts'
+import { diffEdits, type EditLine } from '../domain/pantryEdits.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import UseSoon from './UseSoon.tsx'
@@ -15,16 +16,9 @@ import './pantry.css'
 
 type Ingredient = Tables<'ingredients'>
 
-// One batch line. batchId null = a batch created by this check. `undo` holds the amount a removed row had.
-type Line = {
-  key: string
-  batchId: string | null
-  ingredientId: string
-  qty: number | null
-  expiry: Day | null
-  undo?: number
-}
-type Draft = { lines: Line[]; shown: string[] }
+type Line = EditLine
+// origin = the lines when editing began; the diff is against it, so a partner's changes meanwhile are never overwritten.
+type Draft = { lines: Line[]; shown: string[]; origin: Line[] }
 
 const EPS = 1e-9
 const round3 = (n: number) => Number(n.toFixed(3))
@@ -50,7 +44,7 @@ export default function PantryPage() {
   const [draft, setDraft] = useState<Draft | null>(null)
 
   // Stock is replayed, never stored (src/domain/replay.ts).
-  const base = useMemo<Draft | null>(() => {
+  const base = useMemo<Omit<Draft, 'origin'> | null>(() => {
     if (!events || !day) return null
     const { remaining } = replay(events, day)
     const stock = stockByIngredient(events, remaining)
@@ -67,25 +61,24 @@ export default function PantryPage() {
     return { lines, shown }
   }, [events, ingredients, day])
 
-  const view = draft ?? base
+  const view: Draft | null = draft ?? (base && { ...base, origin: base.lines })
   const dirty = draft !== null
-  const edit = (fn: (d: Draft) => Draft) => setDraft((d) => fn(d ?? base!))
+  const edit = (fn: (d: Draft) => Draft) => setDraft((d) => fn(d ?? { ...base!, origin: base!.lines }))
   const patch = (key: string, p: Partial<Line>) => edit((d) => ({ ...d, lines: d.lines.map((l) => (l.key === key ? { ...l, ...p } : l)) }))
   const addLine = (i: Ingredient) =>
     edit((d) => ({
+      ...d,
       shown: d.shown.includes(i.id) ? d.shown : [...d.shown, i.id],
       lines: [...d.lines, { key: `new-${nextKey++}`, batchId: null, ingredientId: i.id, qty: i.pack_size ? Number(i.pack_size) : 1, expiry: null }],
     }))
-  const remove = (l: Line) =>
-    l.batchId === null ? edit((d) => ({ ...d, lines: d.lines.filter((x) => x.key !== l.key) })) : patch(l.key, { qty: 0, undo: l.qty ?? 0 })
+  const remove = (l: Line, reason: 'finished' | 'discard') =>
+    l.batchId === null ? edit((d) => ({ ...d, lines: d.lines.filter((x) => x.key !== l.key) })) : patch(l.key, { removed: reason })
 
   const save = useMutation({
     mutationFn: async () => {
-      // A snapshot zeroes any batch it omits, so keep batches the partner added while this draft was open.
-      const known = new Set(view!.lines.map((l) => l.batchId))
-      const added = base?.lines.filter((l) => l.batchId && !known.has(l.batchId)) ?? []
-      const items = [...view!.lines, ...added].map((l) => ({ batch_id: l.batchId, ingredient_id: l.ingredientId, qty: l.qty as number, expires_on: l.expiry }))
-      const { error } = await supabase.rpc('save_inventory_check', { on_date: day!, items })
+      // Only what changed is written (adjustments, new batches, expiry fixes), never a snapshot.
+      const { adjustments, newBatches, expiries } = diffEdits(view!.origin, view!.lines)
+      const { error } = await supabase.rpc('save_pantry_edits', { adjustments, new_batches: newBatches, expiries })
       if (error) throw new Error(error.message)
     },
     onSuccess: async () => {
@@ -175,14 +168,14 @@ export default function PantryPage() {
                 {mine.length > 1 && <span className="sp-inv-total">{total(mine)}{unit && ` ${unit}`}</span>}
               </div>
               {mine.map((l) => {
-                const gone = l.batchId !== null && l.qty === 0
+                const gone = !!l.removed
                 const h = !gone && l.expiry ? hint(l.expiry, day, household.expiring_days) : null
                 return (
                   <div key={l.key} className="sp-inv-row" data-removed={gone ? '' : undefined}>
                     {gone ? (
                       <>
                         <span className="sp-inv-gone">Removed</span>
-                        <Button variant="subtle" size="compact-md" miw={44} mih={44} onClick={() => patch(l.key, { qty: l.undo || 1, undo: undefined })}>
+                        <Button variant="subtle" size="compact-md" miw={44} mih={44} onClick={() => patch(l.key, { removed: undefined })}>
                           Undo
                         </Button>
                       </>
@@ -210,9 +203,23 @@ export default function PantryPage() {
                           value={l.expiry}
                           onChange={(v) => patch(l.key, { expiry: v })}
                         />
-                        <ActionIcon variant="subtle" color="gray" size={44} aria-label={`Remove ${ing.name} batch`} onClick={() => remove(l)}>
-                          <IconX size={20} />
-                        </ActionIcon>
+                        {l.batchId === null ? (
+                          <ActionIcon variant="subtle" color="gray" size={44} aria-label={`Remove ${ing.name} line`} onClick={() => remove(l, 'discard')}>
+                            <IconX size={20} />
+                          </ActionIcon>
+                        ) : (
+                          <Menu position="bottom-end" withinPortal>
+                            <Menu.Target>
+                              <ActionIcon variant="subtle" color="gray" size={44} aria-label={`Remove ${ing.name} batch`}>
+                                <IconX size={20} />
+                              </ActionIcon>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Item onClick={() => remove(l, 'finished')}>Finished</Menu.Item>
+                              <Menu.Item onClick={() => remove(l, 'discard')}>Threw it away</Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
+                        )}
                         {h && <span className="sp-inv-hint" data-expired={h.expired ? '' : undefined}>{h.text}</span>}
                       </>
                     )}

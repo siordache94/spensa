@@ -8,7 +8,8 @@ export interface Batch {
   ingredientId: string
   qty: number
   addedOn: Day
-  addedAt: string // ISO timestamp, orders events within a day
+  addedAt: string // the phone's clock when ticked; display only
+  recordedAt: string // server time; decides whether a snapshot covers it
   expiresOn: Day | null
 }
 
@@ -30,7 +31,8 @@ export interface Adjustment {
   kind: 'used' | 'set' | 'finished' | 'discard'
   qty: number | null // for 'used' and 'set'
   on: Day
-  at: string
+  at: string // the phone's clock; display only
+  recordedAt: string // server time; decides whether a snapshot covers it
 }
 
 export interface Snapshot {
@@ -124,12 +126,12 @@ export function replay(
   type Step = { day: Day; rank: number; at: number; run: () => void }
   const steps: Step[] = [
     ...ev.batches
-      .filter((b) => Date.parse(b.addedAt) > snapAt)
-      .map((b) => ({ day: b.addedOn, rank: 0, at: Date.parse(b.addedAt), run: () => remaining.set(b.id, b.qty) })),
+      .filter((b) => Date.parse(b.recordedAt) > snapAt)
+      .map((b) => ({ day: b.addedOn, rank: 0, at: Date.parse(b.recordedAt), run: () => remaining.set(b.id, b.qty) })),
     ...ev.meals.filter((m) => !snap || m.date > snap.onDate).map((m) => ({ day: m.date, rank: 1, at: 0, run: () => eat(m) })),
     ...ev.adjustments
-      .filter((a) => Date.parse(a.at) > snapAt)
-      .map((a) => ({ day: a.on, rank: 2, at: Date.parse(a.at), run: () => adjust(a) })),
+      .filter((a) => Date.parse(a.recordedAt) > snapAt)
+      .map((a) => ({ day: a.on, rank: 2, at: Date.parse(a.recordedAt), run: () => adjust(a) })),
   ]
   steps
     .filter((s) => s.day <= upTo)

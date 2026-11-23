@@ -40,8 +40,10 @@ async function fetchPantry(tz: string) {
       id: b.id,
       ingredientId: b.ingredient_id,
       qty: Number(b.qty),
-      addedOn: localDay(b.added_at, tz),
+      // server time, so a phone with a wrong clock can't hide or misplace its batch; added_at is for display
+      addedOn: localDay(b.recorded_at, tz),
       addedAt: b.added_at,
+      recordedAt: b.recorded_at,
       expiresOn: b.expires_on,
     })),
     meals: meals.data!.map((m) => ({
@@ -58,8 +60,9 @@ async function fetchPantry(tz: string) {
       batchId: a.batch_id,
       kind: a.kind,
       qty: num(a.qty),
-      on: localDay(a.at, tz),
+      on: localDay(a.recorded_at, tz),
       at: a.at,
+      recordedAt: a.recorded_at,
     })),
     snapshot: snap
       ? {

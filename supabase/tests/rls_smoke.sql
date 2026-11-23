@@ -17,6 +17,7 @@ insert into public.ingredients (name, unit) values ('pasta', 'g');
 reset role;
 select id as a_id, invite_code from public.households where name = 'A home' \gset
 set local spensa.a_id = :'a_id';
+set local spensa.invite = :'invite_code';
 
 -- B creates their own household, sees nothing of A's, and can't write into it
 set local role authenticated;
@@ -69,6 +70,40 @@ delete from public.recipes;
 do $$ begin
   assert (select count(*) from public.recipes) = 0, 'recipe delete after snapshot failed';
   assert (select recipe_id from public.planned_meals limit 1) is null, 'past meal should keep a null recipe';
+end $$;
+
+-- Referenced ids must belong to the same household (composite FKs)
+reset role;
+select id as b_ing from public.ingredients where name = 'mine' \gset
+set local spensa.b_ing = :'b_ing';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000c"}';
+do $$ begin
+  begin
+    insert into public.batches (ingredient_id, qty) values (current_setting('spensa.b_ing')::uuid, 1);
+    assert false, 'batch referencing another household''s ingredient should fail';
+  exception when foreign_key_violation then null;
+  end;
+end $$;
+
+-- A member can't rewrite invite_code directly, but can still change everyday settings
+do $$ begin
+  begin
+    update public.households set invite_code = 'hacked';
+    assert false, 'invite_code update should be denied';
+  exception when insufficient_privilege then null;
+  end;
+  update public.households set expiring_days = 5;
+  assert (select expiring_days from public.households) = 5, 'settings update failed';
+end $$;
+
+-- rotate_invite_code returns a new code, the old one stops working, and the new one joins
+do $$
+declare new_code text;
+begin
+  new_code := public.rotate_invite_code();
+  assert new_code is not null and new_code <> current_setting('spensa.invite'), 'code did not change';
+  assert (select invite_code from public.households) = new_code, 'stored code differs from returned';
 end $$;
 
 -- A wrong invite code fails

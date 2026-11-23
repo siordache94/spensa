@@ -18,6 +18,7 @@ const batch = (id: string, qty: number, addedOn: string, expiresOn: string | nul
   qty,
   addedOn,
   addedAt: `${addedOn}T09:00:00Z`,
+  recordedAt: `${addedOn}T09:00:00Z`,
   expiresOn,
 })
 const meal = (id: string, date: string, portions: number, lines: Meal['lines']): Meal => ({ id, date, portions, lines })
@@ -27,6 +28,7 @@ const adj = (a: Partial<Adjustment> & Pick<Adjustment, 'kind' | 'on'>): Adjustme
   batchId: null,
   qty: null,
   at: `${a.on}T20:00:00Z`,
+  recordedAt: `${a.on}T20:00:00Z`,
   ...a,
 })
 const ev = (e: Partial<PantryEvents>): PantryEvents => ({ batches: [], meals: [], adjustments: [], snapshot: null, ...e })
@@ -76,6 +78,43 @@ describe('replay', () => {
       meals: [meal('m', '2026-11-02', 2, [{ ingredientId: 'pasta', qtyPerPortion: null }])],
     })
     expect(replay(e, '2026-11-30').remaining.get('b')).toBe(500)
+  })
+
+  describe('ordering by server time', () => {
+    const snapshot = { onDate: '2026-11-10', takenAt: '2026-11-10T10:05:00Z', batches: [] }
+
+    it('counts a batch ticked offline before the snapshot but recorded after it', () => {
+      const late = { ...batch('milk', 1, '2026-11-10'), addedAt: '2026-11-10T10:00:00Z', recordedAt: '2026-11-10T10:10:00Z' }
+      const { remaining } = replay(ev({ batches: [late], snapshot }), '2026-11-30')
+      expect(remaining.get('milk')).toBe(1)
+    })
+
+    it('ignores a batch recorded before the snapshot that the snapshot does not list', () => {
+      const early = { ...batch('milk', 1, '2026-11-10'), addedAt: '2026-11-10T10:20:00Z', recordedAt: '2026-11-10T10:00:00Z' }
+      const { remaining } = replay(ev({ batches: [early], snapshot }), '2026-11-30')
+      expect(remaining.get('milk') ?? 0).toBe(0)
+    })
+
+    it('treats a batch recorded exactly at taken_at as covered by the snapshot', () => {
+      const same = { ...batch('milk', 1, '2026-11-10'), recordedAt: snapshot.takenAt }
+      const { remaining } = replay(ev({ batches: [same], snapshot }), '2026-11-30')
+      expect(remaining.get('milk') ?? 0).toBe(0)
+    })
+
+    const base = { ...batch('b', 100, '2026-11-01'), recordedAt: '2026-11-01T09:00:00Z' }
+    const withB = { ...snapshot, batches: [{ batchId: 'b', qty: 100 }] }
+
+    it('applies an adjustment made offline before the snapshot but recorded after it', () => {
+      const a = adj({ kind: 'used', qty: 30, on: '2026-11-10', at: '2026-11-10T10:00:00Z', recordedAt: '2026-11-10T10:10:00Z' })
+      const { remaining } = replay(ev({ batches: [base], adjustments: [a], snapshot: withB }), '2026-11-30')
+      expect(remaining.get('b')).toBe(70)
+    })
+
+    it('ignores an adjustment recorded before the snapshot', () => {
+      const a = adj({ kind: 'used', qty: 30, on: '2026-11-10', at: '2026-11-10T10:20:00Z', recordedAt: '2026-11-10T10:00:00Z' })
+      const { remaining } = replay(ev({ batches: [base], adjustments: [a], snapshot: withB }), '2026-11-30')
+      expect(remaining.get('b')).toBe(100)
+    })
   })
 
   it('starts from the snapshot and ignores what it covers', () => {

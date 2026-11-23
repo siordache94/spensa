@@ -25,14 +25,14 @@ export type Database = {
           Tables: {
             "adjustments": {
                   Row: {
-                    "at": string,"batch_id": string | null,"household_id": string,"id": string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty": number | null
+                    "at": string,"batch_id": string | null,"household_id": string,"id": string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty": number | null,"recorded_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null
+                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string
                   }
                   Update: {
-                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"kind"?: Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null
+                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"kind"?: Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string
                   }
                   Relationships: [
                     {
@@ -57,14 +57,14 @@ isOneToOne: false
                   ]
                 },"batches": {
                   Row: {
-                    "added_at": string,"created_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number
+                    "added_at": string,"created_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number,"recorded_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number
+                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number,"recorded_at"?: string
                   }
                   Update: {
-                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number
+                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number,"recorded_at"?: string
                   }
                   Relationships: [
                     {
@@ -215,14 +215,14 @@ isOneToOne: false
                   ]
                 },"shopping_items": {
                   Row: {
-                    "checked": boolean,"created_at": string,"created_by": string | null,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null
+                    "bought_batch_id": string | null,"checked": boolean,"created_at": string,"created_by": string | null,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
                   }
                   Update: {
-                    "checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
                   }
                   Relationships: [
                     {
@@ -298,7 +298,7 @@ isOneToOne: false
           }
           Functions: {
             "buy_shopping_item":
-{ Args: { "expires_on": string,"item_id": string,"qty": number }; Returns: string
+{ Args: { "added_at": string,"batch_id": string,"expires_on": string,"ingredient_id": string,"item_id": string,"qty": number }; Returns: Json
                            },
 "create_household":
 { Args: { "display_name"?: string,"name": string }; Returns: string
@@ -312,14 +312,26 @@ isOneToOne: false
 "my_household":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"rotate_invite_code":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
 "save_inventory_check":
 { Args: { "items": Json,"on_date": string }; Returns: string
+                           },
+"save_pantry_edits":
+{ Args: { "adjustments": Json,"expiries"?: Json,"new_batches": Json }; Returns: undefined
                            },
 "save_recipe":
 { Args: { "instructions": string,"lines": Json,"name": string,"recipe_id": string,"serves": number,"tags": (string)[] }; Returns: string
                            },
+"finish_shopping":
+{ Args: { "batches": Json,"on_date": string }; Returns: string
+                           },
 "save_snapshot":
 { Args: { "batches": Json,"on_date": string }; Returns: string
+                           },
+"unbuy":
+{ Args: { "batch_id": string }; Returns: undefined
                            }
           }
           Enums: {

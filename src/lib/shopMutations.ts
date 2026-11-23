@@ -2,10 +2,14 @@ import { notifications } from '@mantine/notifications'
 import type { QueryClient } from '@tanstack/react-query'
 import type { Tables } from './database.types.ts'
 import { invalidatePantry, localDay } from './pantry.ts'
+import { markBought, restoreBought } from './shopList.ts'
 import { supabase } from './supabase.ts'
 import type { Day } from '../domain/replay.ts'
 
-// A purchase: becomes a batch, and removes the manual item it came from.
+// A purchase: becomes a batch, and marks the manual item it came from as bought (list -> cart -> pantry).
+// An unsynced batch has no server time yet. It will be recorded after every existing snapshot, so sort it last.
+const UNSYNCED = '9999-12-31T00:00:00Z'
+
 // batchId and addedAt are generated when ticking, so a retry can't double-insert.
 export type Buy = {
   ingredientId: string
@@ -27,12 +31,12 @@ export const UN_ON_HAND_KEY = ['shop', 'un-on-hand'] as const
 export const UNCHECK_KEY = ['shop', 'uncheck'] as const
 
 type Pantry = {
-  events: { batches: { id: string; ingredientId: string; qty: number; addedOn: string; addedAt: string; expiresOn: string | null }[] }
+  events: { batches: { id: string; ingredientId: string; qty: number; addedOn: string; addedAt: string; recordedAt: string; expiresOn: string | null }[] }
   domainIngredients: { id: string; onHand: boolean }[]
   ingredients: { id: string; on_hand: boolean }[]
   batchAuthors?: Record<string, string | null>
 }
-type Items = { id: string; checked: boolean }[]
+type Items = { id: string; checked: boolean; bought_batch_id?: string | null }[]
 type Snapshot = [pantry: Pantry | undefined, items: Items | undefined]
 
 /** Cancel in-flight fetches, apply `change` to both caches, and return the old values for rollback. */
@@ -66,14 +70,21 @@ export function registerShopMutations(qc: QueryClient) {
   qc.setMutationDefaults(BUY_KEY, {
     mutationFn: async (b: Buy) => {
       if (b.shoppingItemId) {
-        const { error } = await supabase.rpc('buy_shopping_item', {
+        const { data, error } = await supabase.rpc('buy_shopping_item', {
           item_id: b.shoppingItemId,
+          batch_id: b.batchId,
+          ingredient_id: b.ingredientId,
           qty: b.qty,
           // Generated types omit null for date args; the RPC takes null to mean "no expiry".
           expires_on: b.expiresOn as string,
+          added_at: b.addedAt,
         })
-        // A retry that finds the item gone means the first attempt got through.
-        if (error && error.message !== 'item not found') throw new Error(error.message)
+        // The RPC is idempotent on batch_id, so a retry is a plain success.
+        if (error) throw new Error(error.message)
+        // The partner deleted the item before this tick synced. The batch exists anyway: you have it.
+        if ((data as { item_found?: boolean } | null)?.item_found === false) {
+          notifications.show({ message: `${b.name} was removed from the list by your partner. Kept it in the pantry.` })
+        }
         return
       }
       const { error } = await supabase
@@ -86,10 +97,10 @@ export function registerShopMutations(qc: QueryClient) {
       const me = (await supabase.auth.getSession()).data.session?.user.id ?? null
       return optimistic(qc, (p, items) => {
         const tz = qc.getQueryData<{ timezone: string }>(['household', 'settings'])?.timezone ?? 'UTC'
-        const batch = { id: b.batchId, ingredientId: b.ingredientId, qty: b.qty, addedOn: localDay(b.addedAt, tz), addedAt: b.addedAt, expiresOn: b.expiresOn }
+        const batch = { id: b.batchId, ingredientId: b.ingredientId, qty: b.qty, addedOn: localDay(new Date(), tz), addedAt: b.addedAt, recordedAt: UNSYNCED, expiresOn: b.expiresOn }
         return [
           { ...p, events: { ...p.events, batches: [...p.events.batches, batch] }, batchAuthors: { ...p.batchAuthors, [b.batchId]: me } },
-          b.shoppingItemId ? items?.filter((i) => i.id !== b.shoppingItemId) : undefined,
+          b.shoppingItemId ? markBought(items ?? [], b.shoppingItemId, b.batchId) : undefined,
         ]
       })
     },
@@ -136,15 +147,16 @@ export function registerShopMutations(qc: QueryClient) {
 
   // Untick: undo a tick done by mistake.
   qc.setMutationDefaults(UNBUY_KEY, {
-    // Deletes by the client-generated batch id. The batch cascades away its snapshot rows and adjustments.
-    // shortcut: unticking a bought manual item doesn't restore the manual item
-    // (also, buy_shopping_item makes its own batch id, so a queued untick made before that tick synced deletes nothing)
+    // Deletes the batch (cascading its snapshot rows and adjustments) and puts its list item, if any, back on the list.
     mutationFn: async (batchId: string) => {
-      const { error } = await supabase.from('batches').delete().eq('id', batchId)
+      const { error } = await supabase.rpc('unbuy', { batch_id: batchId })
       if (error) throw new Error(error.message)
     },
     onMutate: (batchId: string) =>
-      optimistic(qc, (p) => [{ ...p, events: { ...p.events, batches: p.events.batches.filter((b) => b.id !== batchId) } }, undefined]),
+      optimistic(qc, (p, items) => [
+        { ...p, events: { ...p.events, batches: p.events.batches.filter((b) => b.id !== batchId) } },
+        items && restoreBought(items, batchId),
+      ]),
     onError: (e: Error, _id: string, old: Snapshot | undefined) => {
       rollback(qc, old)
       fail(e)
