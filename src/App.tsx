@@ -4,6 +4,7 @@ import { NavLink, Route, Routes } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import { QRCodeSVG } from 'qrcode.react'
+import { notifications } from '@mantine/notifications'
 import { supabase } from './lib/supabase.ts'
 import AuthPage from './pages/AuthPage.tsx'
 import HouseholdPage from './pages/HouseholdPage.tsx'
@@ -55,6 +56,15 @@ function HouseholdMenu({ household }: { household: Household }) {
     queryClient.clear()
   }
 
+  async function shareLink() {
+    try {
+      await navigator.share({ title: 'Join my Spensa household', url: inviteUrl })
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      notifications.show({ color: 'red', title: 'Could not share', message: String(err) })
+    }
+  }
+
   return (
     <Menu position="bottom-end" width={260} shadow="md">
       <Menu.Target>
@@ -78,6 +88,19 @@ function HouseholdMenu({ household }: { household: Household }) {
             <QRCodeSVG value={inviteUrl} size={180} />
           </Box>
           <Text size="xs" c="dimmed">Scan to join</Text>
+          <Group gap="xs" wrap="nowrap" w="100%">
+            <Text size="xs" ff="monospace" truncate="end" style={{ flex: 1, minWidth: 0 }}>{inviteUrl}</Text>
+            <CopyButton value={inviteUrl}>
+              {({ copied, copy }) => (
+                <Button size="compact-sm" variant="light" onClick={copy}>
+                  {copied ? 'Copied' : 'Copy link'}
+                </Button>
+              )}
+            </CopyButton>
+            {typeof navigator.share === 'function' && (
+              <Button size="compact-sm" variant="light" onClick={shareLink}>Share</Button>
+            )}
+          </Group>
         </Stack>
         <Menu.Divider />
         <Menu.Item onClick={signOut}>Sign out</Menu.Item>
