@@ -3,6 +3,7 @@ import { Alert, Badge, Box, Button, Card, Group, Loader, Menu, SimpleGrid, Stack
 import { usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { addDays, replay } from '../domain/replay.ts'
+import UseSoon from './UseSoon.tsx'
 import { MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
@@ -79,6 +80,7 @@ export default function PlanPage() {
 
   return (
     <Stack>
+      <UseSoon />
       <Group justify="space-between">
         <Title order={2}>
           {fmt(start, { day: 'numeric', month: 'short' })} – {fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}
