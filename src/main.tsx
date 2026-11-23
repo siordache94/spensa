@@ -10,6 +10,8 @@ import '@mantine/core/styles.css'
 import '@mantine/dates/styles.css'
 import '@mantine/notifications/styles.css'
 import App from './App.tsx'
+import { theme } from './theme.ts'
+import { useSettings } from './lib/settings.ts'
 import { registerShopMutations } from './lib/shopMutations.ts'
 
 const maxAge = 1000 * 60 * 60 * 24 * 7
@@ -26,9 +28,11 @@ const storage = {
 }
 const persister = createSyncStoragePersister({ storage })
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <MantineProvider defaultColorScheme="auto">
+function Root() {
+  const [{ theme: name }] = useSettings()
+  // AMOLED is the dark scheme with palette overrides (theme.css).
+  return (
+    <MantineProvider theme={theme} forceColorScheme={name === 'light' ? 'light' : 'dark'}>
       <Notifications />
       <PersistQueryClientProvider
         client={queryClient}
@@ -40,5 +44,11 @@ createRoot(document.getElementById('root')!).render(
         </BrowserRouter>
       </PersistQueryClientProvider>
     </MantineProvider>
+  )
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <Root />
   </StrictMode>,
 )

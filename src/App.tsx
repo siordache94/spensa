@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { AppShell, Alert, Box, Button, Center, CopyButton, Flex, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
-import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconFridge, IconShoppingCart } from '@tabler/icons-react'
-import { NavLink, Route, Routes } from 'react-router'
+import { AppShell, Alert, Box, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text } from '@mantine/core'
+import { type Icon, IconCalendarWeek, IconCarrot, IconChefHat, IconChevronDown, IconFridge, IconSettings, IconShoppingCart } from '@tabler/icons-react'
+import { Link, NavLink, Route, Routes } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Session } from '@supabase/supabase-js'
 import { QRCodeSVG } from 'qrcode.react'
 import { notifications } from '@mantine/notifications'
 import { supabase } from './lib/supabase.ts'
+import { useWaitingShopMutations } from './lib/offlineQueue.ts'
+import './shell.css'
 import AuthPage from './pages/AuthPage.tsx'
 import HouseholdPage from './pages/HouseholdPage.tsx'
 import PlanPage from './pages/PlanPage.tsx'
@@ -14,6 +16,7 @@ import RecipesPage from './pages/RecipesPage.tsx'
 import PantryPage from './pages/PantryPage.tsx'
 import ShopPage from './pages/ShopPage.tsx'
 import IngredientsPage from './pages/IngredientsPage.tsx'
+import SettingsPage from './pages/SettingsPage.tsx'
 
 const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/', label: 'Plan', end: true, icon: IconCalendarWeek },
@@ -23,25 +26,19 @@ const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/ingredients', label: 'Ingredients', end: false, icon: IconCarrot },
 ]
 
-function NavButton({ to, label, end, icon: NavIcon, fullWidth }: (typeof navItems)[number] & { fullWidth?: boolean }) {
+function NavButton({ to, label, end, icon: NavIcon, side }: (typeof navItems)[number] & { side?: boolean }) {
   return (
-    <NavLink to={to} end={end} style={{ textDecoration: 'none', flex: fullWidth ? undefined : 1, minWidth: 0 }}>
-      {({ isActive }) =>
-        fullWidth ? (
-          <Button component="span" variant={isActive ? 'light' : 'subtle'} fullWidth justify="flex-start" leftSection={<NavIcon size={18} />}>
-            {label}
-          </Button>
-        ) : (
-          <Button component="span" variant={isActive ? 'light' : 'subtle'} fullWidth h={56} px={4}>
-            <Flex component="span" direction="column" align="center" gap={2}>
-              <NavIcon size={22} />
-              <Text component="span" fz={11} lh={1} style={{ whiteSpace: 'nowrap' }}>{label}</Text>
-            </Flex>
-          </Button>
-        )
-      }
+    <NavLink to={to} end={end} className="sp-tab">
+      <NavIcon size={side ? 22 : 24} stroke={1.75} aria-hidden />
+      <span>{label}</span>
     </NavLink>
   )
+}
+
+function OfflineBadge() {
+  const waiting = useWaitingShopMutations()
+  if (waiting === 0) return null
+  return <span className="sp-offline" role="status">Offline — {waiting} waiting</span>
 }
 
 type Household = { id: string; name: string; invite_code: string }
@@ -73,7 +70,9 @@ function HouseholdMenu({ household }: { household: Household }) {
   return (
     <Menu position="bottom-end" width={260} shadow="md">
       <Menu.Target>
-        <Button variant="subtle">{household.name}</Button>
+        <Button variant="subtle" className="sp-hh" rightSection={<IconChevronDown size={16} stroke={1.75} />} aria-label={`Household menu: ${household.name}`}>
+          {household.name}
+        </Button>
       </Menu.Target>
       <Menu.Dropdown>
         <Group px="sm" py="xs" justify="space-between" wrap="nowrap">
@@ -108,6 +107,7 @@ function HouseholdMenu({ household }: { household: Household }) {
           </Group>
         </Stack>
         <Menu.Divider />
+        <Menu.Item component={Link} to="/settings" leftSection={<IconSettings size={18} stroke={1.75} />}>Settings</Menu.Item>
         <Menu.Item onClick={signOut}>Sign out</Menu.Item>
       </Menu.Dropdown>
     </Menu>
@@ -117,22 +117,25 @@ function HouseholdMenu({ household }: { household: Household }) {
 function Shell({ household }: { household: Household }) {
   return (
     <AppShell
-      header={{ height: 56 }}
+      header={{ height: 48 }}
       navbar={{ width: 200, breakpoint: 'sm', collapsed: { mobile: true } }}
-      footer={{ height: { base: 68, sm: 0 } }}
+      footer={{ height: { base: 60, sm: 0 } }}
       padding="md"
     >
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Title order={3}>Spensa</Title>
+      <AppShell.Header className="sp-header">
+        <Group h="100%" pl="md" pr={4} justify="space-between" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap">
+            <Text component="span" className="sp-brand">Spensa</Text>
+            <OfflineBadge />
+          </Group>
           <HouseholdMenu household={household} />
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="xs">
-        <Stack gap="xs">
+      <AppShell.Navbar className="sp-side">
+        <Stack gap={0}>
           {navItems.map((item) => (
-            <NavButton key={item.to} {...item} fullWidth />
+            <NavButton key={item.to} {...item} side />
           ))}
         </Stack>
       </AppShell.Navbar>
@@ -144,15 +147,16 @@ function Shell({ household }: { household: Household }) {
           <Route path="/pantry" element={<PantryPage />} />
           <Route path="/shop" element={<ShopPage />} />
           <Route path="/ingredients" element={<IngredientsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </AppShell.Main>
 
-      <AppShell.Footer hiddenFrom="sm" px="xs" py={6}>
-        <Group grow gap="xs" h="100%" wrap="nowrap">
+      <AppShell.Footer hiddenFrom="sm" className="sp-nav">
+        <nav className="sp-tabs" aria-label="Primary">
           {navItems.map((item) => (
             <NavButton key={item.to} {...item} />
           ))}
-        </Group>
+        </nav>
       </AppShell.Footer>
     </AppShell>
   )

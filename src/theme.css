@@ -1,0 +1,136 @@
+/* Spensa visual system: gate-board world. Palettes per [data-spensa-theme], density per [data-spensa-density]. */
+:root {
+  --sp-yellow: #f5cc3b;
+  --sp-ink: #0b0d10;
+  --sp-label: 'Barlow Semi Condensed', 'Arial Narrow', sans-serif;
+  /* density: compact (default) */
+  --row-h: 44px;
+  --tick: 28px;
+  --amount-size: 16px;
+  --name-size: 16px;
+}
+:root[data-spensa-density='airy'] {
+  --row-h: 72px;
+  --tick: 56px;
+  --amount-size: 30px;
+  --name-size: 18px;
+}
+
+:root[data-spensa-theme='dark'] {
+  --sp-body: #0b0d10; --sp-panel: #1c2127; --sp-rule: #2a2f38; --sp-edge: #6b7178;
+  --sp-text: #f2f2ee; --sp-text2: #9aa0a8; --sp-red: #ff4d4d;
+  --sp-accent: #f5cc3b; /* yellow usable as text */ --sp-focus: #f5cc3b;
+}
+:root[data-spensa-theme='light'] {
+  --sp-body: #e6e8eb; --sp-panel: #ffffff; --sp-rule: #d3d6da; --sp-edge: #6b7178;
+  --sp-text: #0b0d10; --sp-text2: #4a5058; --sp-red: #d92d2d;
+  --sp-accent: #0b0d10; /* yellow is a fill only on light */ --sp-focus: #0b0d10;
+}
+:root[data-spensa-theme='amoled'] {
+  --sp-body: #000000; --sp-panel: #121212; --sp-rule: #2a2a2a; --sp-edge: #8a8a8a;
+  --sp-text: #ffffff; --sp-text2: #d0d0d0; --sp-red: #ff4d4d;
+  --sp-accent: #f5cc3b; --sp-focus: #f5cc3b;
+}
+
+/* Map Mantine variables. Higher specificity than Mantine's own scheme selectors. */
+:root[data-spensa-theme][data-mantine-color-scheme] {
+  --mantine-color-body: var(--sp-body);
+  --mantine-color-text: var(--sp-text);
+  --mantine-color-dimmed: var(--sp-text2);
+  --mantine-color-placeholder: var(--sp-text2);
+  --mantine-color-default: var(--sp-panel);
+  --mantine-color-default-hover: var(--sp-rule);
+  --mantine-color-default-color: var(--sp-text);
+  --mantine-color-default-border: var(--sp-edge);
+  --mantine-color-anchor: var(--sp-accent);
+  --mantine-color-error: var(--sp-red);
+  --mantine-color-red-filled: var(--sp-red);
+  --mantine-color-red-filled-hover: var(--sp-red);
+  --mantine-color-red-light-color: var(--sp-red);
+  --mantine-color-red-outline: var(--sp-red);
+  --mantine-primary-color-contrast: var(--sp-ink);
+  --mantine-color-yellow-contrast: var(--sp-ink);
+  --mantine-primary-color-filled: var(--sp-yellow);
+  --mantine-color-yellow-filled: var(--sp-yellow);
+  --mantine-primary-color-filled-hover: #fad557;
+  --mantine-color-yellow-filled-hover: #fad557;
+  --mantine-primary-color-light-color: var(--sp-accent);
+  --mantine-color-yellow-light-color: var(--sp-accent);
+  --mantine-primary-color-outline: var(--sp-accent);
+  --mantine-color-yellow-outline: var(--sp-accent);
+  --mantine-primary-color-light: rgba(245, 204, 59, 0.16);
+  --mantine-color-yellow-light: rgba(245, 204, 59, 0.16);
+  --mantine-primary-color-light-hover: rgba(245, 204, 59, 0.26);
+  --mantine-color-yellow-light-hover: rgba(245, 204, 59, 0.26);
+  --mantine-color-yellow-text: var(--sp-accent);
+  --mantine-primary-color-text: var(--sp-accent);
+}
+:root[data-spensa-theme='light'][data-mantine-color-scheme] {
+  --mantine-primary-color-light: rgba(245, 204, 59, 0.45);
+  --mantine-color-yellow-light: rgba(245, 204, 59, 0.45);
+  --mantine-primary-color-light-hover: rgba(245, 204, 59, 0.7);
+  --mantine-color-yellow-light-hover: rgba(245, 204, 59, 0.7);
+}
+
+html { background: var(--sp-body); }
+body {
+  font-variant-numeric: tabular-nums lining-nums;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--sp-accent);
+}
+::selection { background: var(--sp-yellow); color: var(--sp-ink); }
+:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: 2px; }
+* { scrollbar-width: thin; scrollbar-color: var(--sp-edge) transparent; }
+
+/* ---- component classes (attached in theme.ts) ---- */
+.sp-panel {
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-rule);
+  color: var(--sp-text);
+}
+.sp-overlay-content { background: var(--sp-panel); border: 1px solid var(--sp-rule); color: var(--sp-text); }
+.sp-modal-header { background: var(--sp-panel); }
+.sp-input {
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-edge);
+  color: var(--sp-text);
+  font-family: inherit;
+}
+.sp-input:focus, .sp-input:focus-within { border-color: var(--sp-focus); outline: 1px solid var(--sp-focus); outline-offset: 0; }
+.sp-input[data-error] { border-color: var(--sp-red); }
+.sp-input-label, .sp-label {
+  font-family: var(--sp-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sp-input-label { font-size: 13px; color: var(--sp-text2); margin-bottom: 4px; }
+.sp-heading { font-family: var(--sp-label); font-weight: 600; letter-spacing: 0.02em; }
+
+/* Checkbox: square, 2px border, yellow fill with ink check */
+.sp-checkbox-root { --checkbox-color: var(--sp-yellow); --checkbox-icon-color: var(--sp-ink); }
+.sp-checkbox-input { border: 2px solid var(--sp-edge); background: transparent; }
+.sp-checkbox-input:checked, .sp-checkbox-input:indeterminate { background: var(--sp-yellow); border-color: var(--sp-yellow); }
+
+/* SegmentedControl */
+.sp-seg-root { background: var(--sp-panel); border: 1px solid var(--sp-rule); padding: 3px; }
+.sp-seg-indicator { background: var(--sp-yellow); box-shadow: none; }
+.sp-seg-label { color: var(--sp-text2); font-weight: 500; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+.sp-seg-label[data-active] { color: var(--sp-ink); font-weight: 700; }
+.sp-seg-label:hover:not([data-active]) { color: var(--sp-text); }
+
+/* Badge: caps label voice */
+.sp-badge { font-family: var(--sp-label); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* Menu */
+.sp-menu-item { color: var(--sp-text); min-height: 44px; }
+.sp-menu-item:hover, .sp-menu-item[data-hovered] { background: var(--sp-rule); }
+.sp-menu-divider { border-color: var(--sp-rule); }
+
+/* Accordion */
+.sp-acc-item { border-color: var(--sp-rule); }
+.sp-acc-control:hover { background: var(--sp-rule); }
+.sp-acc-label { font-weight: 600; }
+
+/* Button: filled yellow keeps ink text; label font weight */
+.sp-button { font-weight: 600; }

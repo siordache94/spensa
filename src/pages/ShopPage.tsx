@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Badge, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, Title, UnstyledButton } from '@mantine/core'
+import { Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, SegmentedControl, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
-import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, SHOP_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
+import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { addDays, replay, shoppingList, type Need } from '../domain/replay.ts'
 
 type Unit = Tables<'ingredients'>['unit']
@@ -104,7 +104,6 @@ export default function ShopPage() {
     }
   }, [queryClient])
 
-  const waiting = useMutationState({ filters: { mutationKey: SHOP_KEY }, select: (m) => m.state.isPaused }).filter(Boolean).length
 
   const [days, setDays] = useState('7')
   const [tasted, setTasted] = useState<string[]>([]) // to-taste ingredients ticked this visit
@@ -270,7 +269,6 @@ export default function ShopPage() {
   return (
     <Stack>
       <Title order={2}>Shop</Title>
-      {waiting > 0 && <Badge color="orange" size="lg">Offline — {waiting} {waiting === 1 ? 'tick' : 'ticks'} waiting</Badge>}
 
       <Stack gap={4}>
         <Text size="sm" fw={500}>Buy for</Text>

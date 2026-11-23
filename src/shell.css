@@ -1,0 +1,22 @@
+.sp-header { background: var(--sp-body); border-bottom: 1px solid var(--sp-edge); }
+.sp-brand { font-family: var(--sp-label); font-weight: 600; font-size: 20px; letter-spacing: 0.01em; color: var(--sp-text); line-height: 1; text-decoration: none; }
+.sp-offline {
+  font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap;
+  color: var(--sp-accent); border: 1px solid var(--sp-yellow); border-radius: 999px; padding: 5px 9px;
+}
+.sp-hh { color: var(--sp-text); font-weight: 600; min-height: 44px; }
+.sp-nav { background: var(--sp-panel); border-top: 1px solid var(--sp-edge); }
+.sp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); height: 100%; }
+.sp-tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px;
+  color: var(--sp-text2); text-decoration: none; position: relative;
+  font: 600 11px/1 var(--sp-label); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.sp-tab[aria-current='page'] { color: var(--sp-accent); box-shadow: inset 0 -3px 0 var(--sp-yellow); }
+:root[data-spensa-theme='light'] .sp-tab[aria-current='page'] { color: var(--sp-ink); }
+.sp-side { background: var(--sp-panel); border-right: 1px solid var(--sp-edge); padding: 8px 0; }
+.sp-side .sp-tab {
+  flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 16px; min-height: 48px; font-size: 14px;
+}
+.sp-side .sp-tab[aria-current='page'] { box-shadow: none; background: rgba(245, 204, 59, 0.14); }
+:root[data-spensa-theme='light'] .sp-side .sp-tab[aria-current='page'] { background: var(--sp-yellow); }
