@@ -19,6 +19,7 @@ async function fetchSettings() {
 }
 
 async function fetchPantry(tz: string) {
+  // Soft-deleted rows never arrive: RLS select policies hide them (ADR 0003), so replay sees only live facts.
   // shortcut: fetches every row since forever; filter by the latest snapshot date when history grows
   const [batches, meals, adjustments, snapshots, ingredients] = await Promise.all([
     supabase.from('batches').select('*'),

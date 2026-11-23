@@ -25,22 +25,22 @@ export type Database = {
           Tables: {
             "adjustments": {
                   Row: {
-                    "at": string,"batch_id": string | null,"household_id": string,"id": string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty": number | null,"recorded_at": string
+                    "at": string,"batch_id": string | null,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty": number | null,"recorded_at": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string
+                    "at"?: string,"batch_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"kind": Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "at"?: string,"batch_id"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"kind"?: Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string
+                    "at"?: string,"batch_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"kind"?: Database["public"]['Enums']["adjustment_kind"],"qty"?: number | null,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
-      foreignKeyName: "adjustments_batch_id_fkey"
-      columns: ["batch_id"]
+      foreignKeyName: "adjustments_batch_fkey"
+      columns: ["household_id","batch_id"]
 isOneToOne: false
       referencedRelation: "batches"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     },{
       foreignKeyName: "adjustments_household_id_fkey"
       columns: ["household_id"]
@@ -48,23 +48,23 @@ isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "adjustments_ingredient_id_fkey"
-      columns: ["ingredient_id"]
+      foreignKeyName: "adjustments_ingredient_fkey"
+      columns: ["household_id","ingredient_id"]
 isOneToOne: false
       referencedRelation: "ingredients"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"batches": {
                   Row: {
-                    "added_at": string,"created_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number,"recorded_at": string
+                    "added_at": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number,"recorded_at": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number,"recorded_at"?: string
+                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "added_at"?: string,"created_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number,"recorded_at"?: string
+                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -74,11 +74,11 @@ isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "batches_ingredient_id_fkey"
-      columns: ["ingredient_id"]
+      foreignKeyName: "batches_ingredient_fkey"
+      columns: ["household_id","ingredient_id"]
 isOneToOne: false
       referencedRelation: "ingredients"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"household_members": {
@@ -117,14 +117,14 @@ isOneToOne: false
                   ]
                 },"ingredients": {
                   Row: {
-                    "archived": boolean,"category": string | null,"household_id": string,"id": string,"min_stock": number | null,"name": string,"on_hand": boolean,"pack_size": number | null,"shelf_life_days": number | null,"unit": Database["public"]['Enums']["unit"]
+                    "archived": boolean,"category": string | null,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"min_stock": number | null,"name": string,"on_hand": boolean,"pack_size": number | null,"shelf_life_days": number | null,"unit": Database["public"]['Enums']["unit"],"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "archived"?: boolean,"category"?: string | null,"household_id"?: string,"id"?: string,"min_stock"?: number | null,"name": string,"on_hand"?: boolean,"pack_size"?: number | null,"shelf_life_days"?: number | null,"unit": Database["public"]['Enums']["unit"]
+                    "archived"?: boolean,"category"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"min_stock"?: number | null,"name": string,"on_hand"?: boolean,"pack_size"?: number | null,"shelf_life_days"?: number | null,"unit": Database["public"]['Enums']["unit"],"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "archived"?: boolean,"category"?: string | null,"household_id"?: string,"id"?: string,"min_stock"?: number | null,"name"?: string,"on_hand"?: boolean,"pack_size"?: number | null,"shelf_life_days"?: number | null,"unit"?: Database["public"]['Enums']["unit"]
+                    "archived"?: boolean,"category"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"min_stock"?: number | null,"name"?: string,"on_hand"?: boolean,"pack_size"?: number | null,"shelf_life_days"?: number | null,"unit"?: Database["public"]['Enums']["unit"],"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -137,14 +137,14 @@ isOneToOne: false
                   ]
                 },"planned_meals": {
                   Row: {
-                    "cook_id": string | null,"date": string,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"slot": string
+                    "cook_id": string | null,"created_at": string,"created_by": string | null,"date": string,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"slot": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "cook_id"?: string | null,"date": string,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"slot": string
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date": string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"slot": string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "cook_id"?: string | null,"date"?: string,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"slot"?: string
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"slot"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -154,23 +154,23 @@ isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "planned_meals_recipe_id_fkey"
-      columns: ["recipe_id"]
+      foreignKeyName: "planned_meals_recipe_fkey"
+      columns: ["household_id","recipe_id"]
 isOneToOne: false
       referencedRelation: "recipes"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"recipe_ingredients": {
                   Row: {
-                    "household_id": string,"ingredient_id": string,"qty_per_portion": number | null,"recipe_id": string
+                    "created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty_per_portion": number | null,"recipe_id": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "household_id"?: string,"ingredient_id": string,"qty_per_portion"?: number | null,"recipe_id": string
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty_per_portion"?: number | null,"recipe_id": string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "household_id"?: string,"ingredient_id"?: string,"qty_per_portion"?: number | null,"recipe_id"?: string
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty_per_portion"?: number | null,"recipe_id"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -180,29 +180,29 @@ isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
-      columns: ["ingredient_id"]
+      foreignKeyName: "recipe_ingredients_ingredient_fkey"
+      columns: ["household_id","ingredient_id"]
 isOneToOne: false
       referencedRelation: "ingredients"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     },{
-      foreignKeyName: "recipe_ingredients_recipe_id_fkey"
-      columns: ["recipe_id"]
+      foreignKeyName: "recipe_ingredients_recipe_fkey"
+      columns: ["household_id","recipe_id"]
 isOneToOne: false
       referencedRelation: "recipes"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"recipes": {
                   Row: {
-                    "created_at": string,"household_id": string,"id": string,"instructions": string,"name": string,"serves": number,"tags": (string)[]
+                    "created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"instructions": string,"name": string,"serves": number,"tags": (string)[],"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"household_id"?: string,"id"?: string,"instructions"?: string,"name": string,"serves"?: number,"tags"?: (string)[]
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"instructions"?: string,"name": string,"serves"?: number,"tags"?: (string)[],"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"household_id"?: string,"id"?: string,"instructions"?: string,"name"?: string,"serves"?: number,"tags"?: (string)[]
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"instructions"?: string,"name"?: string,"serves"?: number,"tags"?: (string)[],"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -215,48 +215,54 @@ isOneToOne: false
                   ]
                 },"shopping_items": {
                   Row: {
-                    "bought_batch_id": string | null,"checked": boolean,"created_at": string,"created_by": string | null,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null
+                    "bought_batch_id": string | null,"checked": boolean,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"ingredient_id": string | null,"qty": number | null,"text": string | null,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null
+                    "bought_batch_id"?: string | null,"checked"?: boolean,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string | null,"qty"?: number | null,"text"?: string | null,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "shopping_items_bought_batch_fkey"
+      columns: ["household_id","bought_batch_id"]
+isOneToOne: false
+      referencedRelation: "batches"
+      referencedColumns: ["household_id","id"]
+    },{
       foreignKeyName: "shopping_items_household_id_fkey"
       columns: ["household_id"]
 isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "shopping_items_ingredient_id_fkey"
-      columns: ["ingredient_id"]
+      foreignKeyName: "shopping_items_ingredient_fkey"
+      columns: ["household_id","ingredient_id"]
 isOneToOne: false
       referencedRelation: "ingredients"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"snapshot_batches": {
                   Row: {
-                    "batch_id": string,"household_id": string,"qty": number,"snapshot_id": string
+                    "batch_id": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"qty": number,"snapshot_id": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "batch_id": string,"household_id"?: string,"qty": number,"snapshot_id": string
+                    "batch_id": string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"qty": number,"snapshot_id": string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "batch_id"?: string,"household_id"?: string,"qty"?: number,"snapshot_id"?: string
+                    "batch_id"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"qty"?: number,"snapshot_id"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
-      foreignKeyName: "snapshot_batches_batch_id_fkey"
-      columns: ["batch_id"]
+      foreignKeyName: "snapshot_batches_batch_fkey"
+      columns: ["household_id","batch_id"]
 isOneToOne: false
       referencedRelation: "batches"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     },{
       foreignKeyName: "snapshot_batches_household_id_fkey"
       columns: ["household_id"]
@@ -264,23 +270,23 @@ isOneToOne: false
       referencedRelation: "households"
       referencedColumns: ["id"]
     },{
-      foreignKeyName: "snapshot_batches_snapshot_id_fkey"
-      columns: ["snapshot_id"]
+      foreignKeyName: "snapshot_batches_snapshot_fkey"
+      columns: ["household_id","snapshot_id"]
 isOneToOne: false
       referencedRelation: "snapshots"
-      referencedColumns: ["id"]
+      referencedColumns: ["household_id","id"]
     }
                   ]
                 },"snapshots": {
                   Row: {
-                    "household_id": string,"id": string,"on_date": string,"taken_at": string
+                    "created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"on_date": string,"taken_at": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "household_id"?: string,"id"?: string,"on_date": string,"taken_at"?: string
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"on_date": string,"taken_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "household_id"?: string,"id"?: string,"on_date"?: string,"taken_at"?: string
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"on_date"?: string,"taken_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -306,11 +312,20 @@ isOneToOne: false
 "default_member_name":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"finish_shopping":
+{ Args: { "batches": Json,"on_date": string }; Returns: string
+                           },
 "join_household":
 { Args: { "code": string,"display_name"?: string }; Returns: string
                            },
 "my_household":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"require_live":
+{ Args: { "rid": string,"tbl": string }; Returns: undefined
+                           },
+"restore":
+{ Args: { "ids": (string)[],"tbl": string }; Returns: number
                            },
 "rotate_invite_code":
 { Args: Record<PropertyKey, never>; Returns: string
@@ -324,11 +339,11 @@ isOneToOne: false
 "save_recipe":
 { Args: { "instructions": string,"lines": Json,"name": string,"recipe_id": string,"serves": number,"tags": (string)[] }; Returns: string
                            },
-"finish_shopping":
-{ Args: { "batches": Json,"on_date": string }; Returns: string
-                           },
 "save_snapshot":
 { Args: { "batches": Json,"on_date": string }; Returns: string
+                           },
+"soft_delete":
+{ Args: { "ids": (string)[],"tbl": string }; Returns: number
                            },
 "unbuy":
 { Args: { "batch_id": string }; Returns: undefined

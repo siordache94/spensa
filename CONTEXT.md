@@ -15,6 +15,7 @@ Stack: Vite + React + TypeScript, Mantine, TanStack Query, React Router, Supabas
 - **Batch**: one purchase of an ingredient: quantity, date added, optional expiry. The pantry page lists a total per ingredient (batches as sub-lines) and edits batches in place once the pen icon enters edit mode.
 - **Adjustment**: a manual stock change: `used X`, `set remaining to X`, `finished`, or `discard` (recorded as waste). Applies to the batch that expires soonest unless a batch is picked.
 - **Snapshot**: the recorded remaining quantity of every batch at a moment. Saved by "Done shopping" at the end of a shopping trip. The Pantry page's "Save changes" writes no snapshot: it records only what changed, as adjustments (amount changed = `set`; removed = `finished` or `discard`, chosen from a menu) and new batches. A snapshot is the truth: events before it no longer change stock.
+- **Soft delete**: nothing is ever hard-deleted. Deleting sets `deleted_at` and `deleted_by`; deleted rows are invisible to normal reads (RLS) and to the replay. **Restore** clears `deleted_at` (an undo), together with the children deleted with it. Every row also records `created_by`, `updated_by` (and their times), set by triggers and never by the client. See [ADR 0003](docs/adr/0003-soft-delete-and-authorship.md).
 - **Replay**: how stock is computed. Start from the latest snapshot, then apply batches, planned meals and adjustments in date order. Meals use the batches that expire soonest first (FEFO). Nothing derived is stored. See [ADR 0001](docs/adr/0001-stock-by-replay.md).
 - **Current stock**: the replay up to today. **Projected stock**: the replay including future planned meals.
 - **Shortfall**: a past planned meal needed more than the replay had. Shown as "short by X"; stock never goes negative.
@@ -23,8 +24,8 @@ Stack: Vite + React + TypeScript, Mantine, TanStack Query, React Router, Supabas
 
 ## Rules
 
-- An ingredient can't be deleted while a recipe uses it. Its page lists those recipes.
-- A recipe can't be deleted while a planned meal after the latest snapshot uses it. Its page lists those meals.
+- "Deleted" means soft-deleted and restorable. An ingredient can't be deleted while a recipe uses it. Its page lists those recipes.
+- A recipe can't be deleted while a planned meal after the latest snapshot uses it. Its page lists those meals. Older meals keep pointing at the deleted recipe and show it as removed; restoring the recipe reconnects them.
 - Quantities are decimals in the ingredient's unit. Metric only, no unit conversion.
 
 ## Out of v1

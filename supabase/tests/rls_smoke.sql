@@ -69,8 +69,110 @@ insert into public.snapshots (on_date) values ('2026-11-26');
 delete from public.recipes;
 do $$ begin
   assert (select count(*) from public.recipes) = 0, 'recipe delete after snapshot failed';
-  assert (select recipe_id from public.planned_meals limit 1) is null, 'past meal should keep a null recipe';
+  -- the meal keeps pointing at the (soft-deleted) recipe; the recipe is simply invisible to clients
+  assert (select recipe_id from public.planned_meals limit 1) is not null, 'past meal should keep its recipe id';
+  assert (select count(*) from public.recipe_ingredients) = 0, 'recipe lines should go with the recipe';
 end $$;
+
+-- A hard DELETE was converted: the row is still there for the superuser, stamped with who and when.
+reset role;
+do $$ begin
+  assert (select count(*) from public.recipes where name = 'Carbonara' and deleted_at is not null
+            and deleted_by = '00000000-0000-0000-0000-00000000000c') = 1, 'delete should be a soft delete by C';
+  assert (select count(*) from public.recipe_ingredients where deleted_at is not null
+            and deleted_by = '00000000-0000-0000-0000-00000000000c') = 1, 'recipe line should be soft-deleted with it';
+  -- created_by was stamped from auth.uid()
+  assert (select created_by from public.ingredients where name = 'pasta') = '00000000-0000-0000-0000-00000000000a', 'created_by wrong';
+  assert (select created_by from public.recipes where name = 'Carbonara') = '00000000-0000-0000-0000-00000000000c', 'recipe created_by wrong';
+end $$;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000c"}';
+
+-- Restore brings back the recipe and the lines that went with it; a recipe the caller can't see can't be touched
+do $$
+declare rid uuid;
+begin
+  -- invisible to normal reads, so the id comes from the planned meal
+  select recipe_id into rid from public.planned_meals limit 1;
+  assert (select count(*) from public.recipes where id = rid) = 0, 'deleted recipe visible';
+  assert public.restore('recipes', array[rid]) = 1, 'restore did not restore';
+  assert (select count(*) from public.recipes where id = rid) = 1, 'restored recipe invisible';
+  assert (select count(*) from public.recipe_ingredients where recipe_id = rid) = 1, 'recipe lines not restored';
+  assert (select count(*) from public.recipes where id = rid and updated_by = '00000000-0000-0000-0000-00000000000c') = 1, 'restore not recorded in updated_by';
+  assert public.restore('recipes', array[rid]) = 0, 'restoring a live row should be a no-op';
+  begin
+    perform public.restore('households', array[rid]);
+    assert false, 'restore on other tables must be refused';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+
+-- Authorship can't be spoofed: created_by/created_at/updated_by/deleted_* are set by triggers
+do $$
+declare iid uuid;
+begin
+  insert into public.ingredients (name, unit, created_by, created_at, updated_by, deleted_by)
+    values ('salt', 'to_taste', '00000000-0000-0000-0000-00000000000a', '2000-01-01', '00000000-0000-0000-0000-00000000000a',
+            '00000000-0000-0000-0000-00000000000a') returning id into iid;
+  assert (select created_by from public.ingredients where id = iid) = '00000000-0000-0000-0000-00000000000c', 'created_by spoofed';
+  assert (select created_at from public.ingredients where id = iid) > '2020-01-01', 'created_at spoofed';
+  assert (select updated_by is null and deleted_by is null from public.ingredients where id = iid), 'insert spoofed updated/deleted_by';
+  update public.ingredients set category = 'spices', created_by = '00000000-0000-0000-0000-00000000000a',
+         updated_by = '00000000-0000-0000-0000-00000000000a', updated_at = '2000-01-01' where id = iid;
+  assert (select created_by from public.ingredients where id = iid) = '00000000-0000-0000-0000-00000000000c', 'created_by changed by update';
+  assert (select updated_by from public.ingredients where id = iid) = '00000000-0000-0000-0000-00000000000c', 'updated_by spoofed';
+  assert (select updated_at from public.ingredients where id = iid) > '2020-01-01', 'updated_at spoofed';
+  -- a client can't write deleted_at directly (the row would vanish from its own view), and can't undelete via update
+  begin
+    update public.ingredients set deleted_at = now(), deleted_by = '00000000-0000-0000-0000-00000000000a' where id = iid;
+    assert false, 'direct deleted_at update should be refused';
+  exception when insufficient_privilege then null;
+  end;
+  -- soft delete via RPC: stamped with the caller, hidden, cascades to its batches; name is free again
+  insert into public.batches (id, ingredient_id, qty) values ('40000000-0000-0000-0000-000000000001', iid, 5);
+  insert into public.adjustments (batch_id, ingredient_id, kind, qty) values ('40000000-0000-0000-0000-000000000001', iid, 'set', 2);
+  assert public.soft_delete('ingredients', array[iid]) = 1, 'soft_delete count';
+  assert (select count(*) from public.ingredients where id = iid) = 0, 'soft-deleted ingredient visible';
+  assert (select count(*) from public.batches where id = '40000000-0000-0000-0000-000000000001') = 0, 'batch visible after ingredient delete';
+  insert into public.ingredients (name, unit) values ('salt', 'to_taste'); -- partial unique index: name reusable
+  begin
+    insert into public.batches (ingredient_id, qty) values (iid, 1);
+    assert false, 'batch for a deleted ingredient should fail';
+  exception when foreign_key_violation then null;
+  end;
+  begin
+    perform public.restore('ingredients', array[iid]);
+    assert false, 'restore into a taken name should fail';
+  exception when unique_violation then null;
+  end;
+  delete from public.ingredients where name = 'salt';  -- hard delete -> soft
+  assert public.restore('ingredients', array[iid]) = 1, 'restore ingredient';
+  assert (select count(*) from public.batches where id = '40000000-0000-0000-0000-000000000001') = 1, 'batch not restored with ingredient';
+  assert (select count(*) from public.adjustments where batch_id = '40000000-0000-0000-0000-000000000001') = 1, 'adjustment not restored with ingredient';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from public.ingredients where name = 'salt' and deleted_by = '00000000-0000-0000-0000-00000000000c') = 1, 'deleted_by not recorded';
+end $$;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000c"}';
+
+-- Another household can't soft-delete or restore A's rows
+reset role;
+select id as a_ing from public.ingredients where name = 'pasta' \gset
+set local spensa.a_ing = :'a_ing';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000b"}';
+do $$ begin
+  assert public.soft_delete('ingredients', array[current_setting('spensa.a_ing')::uuid]) = 0, 'B soft-deleted A''s row';
+  delete from public.ingredients where id = current_setting('spensa.a_ing')::uuid;
+end $$;
+reset role;
+do $$ begin
+  assert (select deleted_at is null from public.ingredients where name = 'pasta'), 'cross-household delete took effect';
+end $$;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000c"}';
 
 -- Referenced ids must belong to the same household (composite FKs)
 reset role;

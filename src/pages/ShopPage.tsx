@@ -11,6 +11,7 @@ import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
+import { softDelete } from '../lib/softDelete.ts'
 import { toBuy } from '../lib/shopList.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
@@ -257,7 +258,8 @@ export default function ShopPage() {
 
   const clearChecked = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('shopping_items').delete().eq('checked', true)
+      const ids = (items.data ?? []).filter((i) => i.checked).map((i) => i.id)
+      const { error } = await softDelete('shopping_items', ids)
       if (error) throw new Error(error.message)
     },
     onSettled: () => invalidateItems(),

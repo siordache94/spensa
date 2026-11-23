@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
 import { usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
+import { softDelete } from '../lib/softDelete.ts'
 import { addDays, replay } from '../domain/replay.ts'
 import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
 import UseSoon from './UseSoon.tsx'
@@ -148,7 +149,7 @@ export default function PlanPage() {
                           <Menu.Item onClick={() => setDialog({ kind: 'portions', meal: m })}>Change portions</Menu.Item>
                           <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
                           <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
-                          <Menu.Item color="red" onClick={() => move.mutate(supabase.from('planned_meals').delete().eq('id', m.id))}>Delete</Menu.Item>
+                          <Menu.Item color="red" onClick={() => move.mutate(softDelete('planned_meals', [m.id]))}>Delete</Menu.Item>
                         </Menu.Dropdown>
                       </Menu>
                     ))}

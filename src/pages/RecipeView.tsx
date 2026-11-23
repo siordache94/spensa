@@ -6,6 +6,7 @@ import { IconX } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invalidatePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
+import { softDelete, restoreRows } from '../lib/softDelete.ts'
 import type { Tables } from '../lib/database.types.ts'
 
 type Unit = Tables<'ingredients'>['unit']
@@ -74,7 +75,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
 
   const remove = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('recipes').delete().eq('id', recipe.id)
+      const { error } = await softDelete('recipes', [recipe.id])
       if (error?.code === '23503') throw new Error(BLOCKED)
       if (error) throw new Error(error.message)
     },
@@ -92,7 +93,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
 
   const unplan = useMutation({
     mutationFn: async (rows: Meal[]) => {
-      const { error } = await supabase.from('planned_meals').delete().in('id', rows.map((m) => m.id))
+      const { error } = await softDelete('planned_meals', rows.map((m) => m.id))
       if (error) throw new Error(error.message)
       return rows
     },
@@ -113,7 +114,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
 
   const restore = useMutation({
     mutationFn: async (rows: Meal[]) => {
-      const { error } = await supabase.from('planned_meals').insert(rows)
+      const { error } = await restoreRows('planned_meals', rows.map((m) => m.id))
       if (error) throw new Error(error.message)
     },
     onSettled: refresh,

@@ -6,6 +6,7 @@ import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase.ts'
+import { softDelete } from '../lib/softDelete.ts'
 import type { Tables, TablesInsert } from '../lib/database.types.ts'
 
 type Ingredient = Tables<'ingredients'>
@@ -86,7 +87,7 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const remove = useMutation({
     mutationFn: async () => {
       if (!ingredient) return
-      const { error } = await supabase.from('ingredients').delete().eq('id', ingredient.id)
+      const { error } = await softDelete('ingredients', [ingredient.id])
       if (error?.code === '23503') throw new Error('Remove it from these recipes to delete it.')
       if (error) throw new Error(error.message)
     },

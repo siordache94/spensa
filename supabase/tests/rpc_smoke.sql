@@ -44,8 +44,25 @@ end $$;
 -- unbuy: batch deleted, item put back on the list; unknown batch is a no-op
 do $$ begin
   perform public.unbuy('30000000-0000-0000-0000-000000000001');
-  assert not exists (select 1 from public.batches where id = '30000000-0000-0000-0000-000000000001'), 'batch not deleted';
+  assert not exists (select 1 from public.batches where id = '30000000-0000-0000-0000-000000000001'), 'batch still visible';
   assert (select bought_batch_id from public.shopping_items where id = '20000000-0000-0000-0000-000000000001') is null, 'bought_batch_id not cleared';
+  perform public.unbuy('30000000-0000-0000-0000-000000000001');
+end $$;
+
+-- unbuy soft-deleted: the batch row is still there, stamped, and a ticked-again batch restores cleanly
+reset role;
+do $$ begin
+  assert (select deleted_by from public.batches where id = '30000000-0000-0000-0000-000000000001') = '00000000-0000-0000-0000-00000000000a', 'unbuy did not stamp deleted_by';
+end $$;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a"}';
+do $$ begin
+  -- a retried buy of the unbought batch must not relink it to the item
+  perform public.buy_shopping_item('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001', 500, null, now());
+  assert (select bought_batch_id from public.shopping_items where id = '20000000-0000-0000-0000-000000000001') is null, 'retry relinked a deleted batch';
+  assert public.restore('batches', array['30000000-0000-0000-0000-000000000001'::uuid]) = 1, 'restore batch';
+  assert exists (select 1 from public.batches where id = '30000000-0000-0000-0000-000000000001'), 'restored batch invisible';
   perform public.unbuy('30000000-0000-0000-0000-000000000001');
 end $$;
 
@@ -59,6 +76,14 @@ do $$ begin
   assert exists (select 1 from public.shopping_items where id = '20000000-0000-0000-0000-000000000003'), 'unbought item removed';
   assert (select count(*) from public.snapshots) = 1, 'snapshot not saved';
 end $$;
+reset role;
+do $$ begin
+  assert (select deleted_by from public.shopping_items where id = '20000000-0000-0000-0000-000000000001') = '00000000-0000-0000-0000-00000000000a',
+    'finish_shopping should soft-delete bought items';
+  assert (select count(*) from public.shopping_items where deleted_at is not null) = 2, 'expected two soft-deleted items (cleared + removed)';
+end $$;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a"}';
 
 -- save_pantry_edits: adjustments for changes, new batch for additions, expiry fix, nothing else
 do $$
@@ -87,6 +112,28 @@ begin
     assert false, 'set without qty should fail';
   exception when invalid_parameter_value then null;
   end;
+end $$;
+
+-- save_recipe diffs lines: unchanged lines keep their row, removed ones are soft-deleted, re-adding works
+do $$
+declare rid uuid; i1 constant uuid := '10000000-0000-0000-0000-000000000001'; i2 constant uuid := '10000000-0000-0000-0000-000000000002';
+        line1 uuid;
+begin
+  rid := public.save_recipe(null, 'Mix', '', '{}', 2, jsonb_build_array(jsonb_build_object('ingredient_id', i1, 'qty_per_portion', 50),
+                                                                     jsonb_build_object('ingredient_id', i2, 'qty_per_portion', 60)));
+  select id into line1 from public.recipe_ingredients where recipe_id = rid and ingredient_id = i1;
+  perform public.save_recipe(rid, 'Mix', '', '{}', 2, jsonb_build_array(jsonb_build_object('ingredient_id', i1, 'qty_per_portion', 70)));
+  assert (select count(*) from public.recipe_ingredients where recipe_id = rid) = 1, 'removed line still visible';
+  assert (select id from public.recipe_ingredients where recipe_id = rid) = line1, 'unchanged line should keep its row';
+  assert (select qty_per_portion from public.recipe_ingredients where recipe_id = rid) = 70, 'qty not updated';
+  perform public.save_recipe(rid, 'Mix', '', '{}', 2, jsonb_build_array(jsonb_build_object('ingredient_id', i1, 'qty_per_portion', 70),
+                                                                       jsonb_build_object('ingredient_id', i2, 'qty_per_portion', 60)));
+  assert (select count(*) from public.recipe_ingredients where recipe_id = rid) = 2, 're-adding a removed line failed';
+end $$;
+reset role;
+do $$ begin
+  assert (select count(*) from public.recipe_ingredients) = 3, 'expected 3 line rows (one soft-deleted)';
+  assert (select count(*) from public.recipe_ingredients where deleted_at is not null) = 1, 'expected 1 soft-deleted line';
 end $$;
 
 select 'RPC smoke test passed' as result;
