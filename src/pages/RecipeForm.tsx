@@ -182,7 +182,7 @@ export default function RecipeForm({ recipe, onClose }: Props) {
                     {unit && unit !== 'to_taste' && (
                       <Stepper
                         aria-label="Amount"
-                        min={0}
+                        min={amountStep(unit, 0)}
                         step={amountStep(unit, line.amount)}
                         unit={unit}
                         value={line.amount}

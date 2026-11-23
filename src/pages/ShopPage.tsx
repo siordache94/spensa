@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text } from '@mantine/core'
+import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loader, Modal, Stack, Text } from '@mantine/core'
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
+import { Stepper } from '../components/Stepper.tsx'
+import { amountStep } from '../lib/amountStep.ts'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
@@ -44,10 +46,10 @@ const packLabel = (packs: number | null) => (packs ? `≈ ${packs} ${packs === 1
 const dayName = (d: Day) => dayjs(d).format('ddd D')
 
 function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean; onBuy: (b: Buy) => void; onClose: () => void }) {
-  const [qty, setQty] = useState<number | string>(buy.qty)
+  const [qty, setQty] = useState<number | null>(buy.qty)
   const [expires, setExpires] = useState<DateValue>(buy.expiresOn ? dayjs(buy.expiresOn).toDate() : null)
   const dirty = useDirty({ qty, expires })
-  const qtyValue = qty === '' ? null : Number(qty)
+  const qtyValue = qty
   const qtyValid = qtyValue !== null && qtyValue > 0
 
   function submit() {
@@ -58,15 +60,15 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
   return (
     <GuardedModal dirty={dirty} onClose={onClose} title={buy.name}>
       <Stack>
-        <NumberInput
+        <Stepper
           label="Amount"
           size="lg"
+          min={amountStep(buy.unit, 0)}
+          step={amountStep(buy.unit, qty)}
+          unit={buy.unit === 'count' ? undefined : buy.unit}
           value={qty}
           onChange={setQty}
-          suffix={buy.unit === 'count' ? undefined : ` ${buy.unit}`}
-          decimalScale={3}
-          min={0}
-          error={qty !== '' && !qtyValid ? 'Must be more than 0' : undefined}
+          error={qty !== null && !qtyValid ? 'Must be more than 0' : undefined}
         />
         <DatePickerInput
           label="Expires"

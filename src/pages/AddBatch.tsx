@@ -75,7 +75,7 @@ export default function AddBatch({ ingredients, today, onClose }: Props) {
         />
         <Stepper
           label="Quantity"
-          min={0}
+          min={amountStep(selected?.unit, 0)}
           step={amountStep(selected?.unit, qty)}
           unit={selected?.unit}
           value={qty}

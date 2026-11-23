@@ -178,7 +178,7 @@ function IngredientDetail({ ingredient, rows }: { ingredient: Ingredient; rows: 
       </Stack>
 
       <Group align="flex-end" wrap="nowrap">
-        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Used…" min={0} step={amountStep(ingredient.unit, used)} unit={ingredient.unit} value={used} onChange={setUsed} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}><Stepper label="Used…" min={amountStep(ingredient.unit, 0)} step={amountStep(ingredient.unit, used)} unit={ingredient.unit} value={used} onChange={setUsed} /></div>
         <Button
           variant="light"
           h={44}
