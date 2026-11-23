@@ -69,11 +69,11 @@
   }
   .sp-gutterslot:last-child { border-bottom: 0; }
   .sp-day { margin: 0; border: 0; border-block: 0; border-left: 1px solid var(--sp-rule); min-width: 0; }
-  .sp-ghost { display: grid; }
+  .sp-ghost { display: flex; }
   .sp-dayhead { padding: 0 8px; gap: 6px; font-size: 13px; white-space: nowrap; overflow: hidden; }
   .sp-dayhead small { font-size: 11px; letter-spacing: 0.08em; }
 
-  .sp-slotrow { position: relative; grid-template-columns: minmax(0, 1fr); align-content: start; padding: 6px; gap: 4px; }
+  .sp-slotrow { position: relative; display: flex; flex-direction: column; align-items: stretch; padding: 6px; gap: 4px; }
   .sp-slotname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
   .sp-slotmeals { gap: 4px; }
   .sp-mealrow, .sp-mealrow:first-child {
@@ -83,7 +83,8 @@
   .sp-mealname { font-size: 14px; line-height: 1.2; }
   .sp-cook { font-size: 12px; overflow-wrap: anywhere; }
   .sp-mark { font-size: 12px; }
-  .sp-addmeal { width: 100%; height: 44px; }
+  /* pinned to the cell bottom so the + sits on one line across the row */
+  .sp-addmeal { width: 100%; height: 44px; margin-top: auto; }
 }
 @media (min-width: 64em) {
   .sp-mealname { overflow-wrap: break-word; hyphens: auto; }
