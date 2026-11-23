@@ -6,6 +6,7 @@ import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
+import { uuid } from '../lib/uuid.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
@@ -37,7 +38,7 @@ type Entry = {
 
 type Meal = { id: string; date: Day; slot: string; portions: number; position: number; recipes: { name: string } | null }
 
-const withIds = (b: Buy): BuyVars => ({ ...b, batchId: crypto.randomUUID(), addedAt: new Date().toISOString() })
+const withIds = (b: Buy): BuyVars => ({ ...b, batchId: uuid(), addedAt: new Date().toISOString() })
 const STORE_WALK = ['produce', 'dairy', 'meat', 'fish', 'dry goods', 'frozen']
 const round1 = (n: number) => Math.round(n * 10) / 10
 const round3 = (n: number) => Math.round(n * 1000) / 1000
