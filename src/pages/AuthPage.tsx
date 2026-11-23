@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, Button, Center, Divider, PasswordInput, Stack, TextInput } from '@mantine/core'
 import { useCommand } from '../lib/api/command.ts'
-import { signIn, signInWithGoogle, signUp } from '../lib/api/auth.ts'
+import { INVITE_ONLY_MESSAGE, readAuthRedirectError, signIn, signInWithGoogle, signUp, stripAuthRedirectError } from '../lib/api/auth.ts'
 import './lists.css'
 
 export default function AuthPage() {
@@ -10,7 +10,17 @@ export default function AuthPage() {
   const [inviteCode, setInviteCode] = useState(inviteFromLink)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  // A refused Google sign-in comes back in the URL. Read it once, then strip only the error params so Supabase's own handling is untouched.
+  const [redirectError] = useState(() => readAuthRedirectError(window.location.search, window.location.hash))
+  const [error, setError] = useState<string | null>(redirectError)
+  const fromGoogleRedirect = redirectError !== null && error === redirectError
+  useEffect(() => {
+    const { search, hash } = window.location
+    const next = stripAuthRedirectError(search, hash)
+    if (next.search !== search || next.hash !== hash) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${next.search}${next.hash}`)
+    }
+  }, [])
   const onFailure = (e: Error) => setError(e.message)
   const google = useCommand(signInWithGoogle, { onError: onFailure })
   const signingInCmd = useCommand(signIn, { onError: onFailure })
@@ -35,7 +45,14 @@ export default function AuthPage() {
         <form onSubmit={submit}>
           <Stack>
             <h2 className="sp-title">{signingIn ? 'Sign in' : 'Create account'}</h2>
-            {error && <Alert color="red">{error}</Alert>}
+            {error && (
+              <Alert color="red">
+                {error}
+                {fromGoogleRedirect && error === INVITE_ONLY_MESSAGE && (
+                  <div>Google sign-in works only for emails a household member has added. Use the invite link to sign up with email instead.</div>
+                )}
+              </Alert>
+            )}
             <Button type="button" variant="default" onClick={() => { setError(null); google.mutate() }}>
               Continue with Google
             </Button>
