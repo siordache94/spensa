@@ -18,7 +18,9 @@ Deno.serve(async (req) => {
   try {
     const hid = body.household_id
     const keys = (await loadHousehold(admin, hid)).keys()
-    const { data: opened, error } = await admin.rpc('push_list_observe', { hid, by: body.by ?? null, keys })
+    // Generated RPC arg types omit null; the function takes null for "no author".
+    const by = (body.by ?? null) as string
+    const { data: opened, error } = await admin.rpc('push_list_observe', { hid, by, keys })
     if (error) throw new Error(error.message)
     if (opened) {
       // Keep the worker alive for the window, then send. If this is lost (restart), push-cron's sweep sends it.

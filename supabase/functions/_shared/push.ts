@@ -1,6 +1,7 @@
 // Shared by the push edge functions: service-role client, data loading, and the web-push sender.
 // The decisions (who, what, when) live in src/lib/notify.ts and src/domain/toBuy.ts so they are unit tested.
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import type { Database } from '../../../src/lib/database.types.ts'
 import webpush from 'npm:web-push@3.6.7'
 import { buildEvents, buildIngredients, localDay } from '../../../src/domain/pantryRows.ts'
 import { replay, type Ingredient, type PantryEvents } from '../../../src/domain/replay.ts'
@@ -16,10 +17,11 @@ export const cors = {
 export const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
-export type Admin = SupabaseClient
+// Typed with the generated schema so to-one embeds (planned_meals -> recipes) are objects, not arrays.
+export type Admin = SupabaseClient<Database>
 
 export const adminClient = (): Admin =>
-  createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  createClient<Database>(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 

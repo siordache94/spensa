@@ -12,13 +12,16 @@ import '@mantine/notifications/styles.css'
 import App from './App.tsx'
 import { theme } from './theme.ts'
 import { useSettings } from './lib/settings.ts'
+import { ApiProvider } from './lib/api/context.tsx'
+import { supabaseAdapter } from './lib/api/supabaseAdapter.ts'
 import { registerShopMutations } from './lib/shopMutations.ts'
 
 const maxAge = 1000 * 60 * 60 * 24 * 7
 
 // gcTime must be at least maxAge, or persisted data is dropped.
 const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: maxAge } } })
-registerShopMutations(queryClient)
+// One adapter for the whole app: the offline mutation functions and <ApiProvider> must use the same one.
+registerShopMutations(queryClient, supabaseAdapter)
 
 // localStorage can throw (private mode); the app then just runs without a persisted cache.
 const storage = {
@@ -39,9 +42,11 @@ function Root() {
         persistOptions={{ persister, maxAge }}
         onSuccess={() => { void queryClient.resumePausedMutations() }}
       >
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <ApiProvider api={supabaseAdapter}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ApiProvider>
       </PersistQueryClientProvider>
     </MantineProvider>
   )

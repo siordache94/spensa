@@ -1,18 +1,21 @@
-import { supabase } from './supabase'
+import { supabaseAdapter } from './api/supabaseAdapter.ts'
+import type { SoftTable } from './api/port.ts'
 
-/** Tables a client may soft-delete from. Nothing in the app hard-deletes (docs/adr/0003-soft-delete-and-authorship.md). */
-export type SoftTable =
-  | 'ingredients'
-  | 'recipes'
-  | 'recipe_ingredients'
-  | 'planned_meals'
-  | 'batches'
-  | 'adjustments'
-  | 'snapshots'
-  | 'shopping_items'
+export type { SoftTable }
+
+// Legacy wrappers for pages that haven't migrated yet. They keep the old `{ error }` return shape.
+// New code: api.trash.softDelete / api.trash.restore through a command (see src/lib/api/README.md).
+const wrap = async (run: () => Promise<void>) => {
+  try {
+    await run()
+    return { error: null }
+  } catch (e) {
+    return { error: e as Error & { code?: string } }
+  }
+}
 
 /** Soft-deletes rows by id (sets deleted_at/deleted_by on the server; children go with their parent). */
-export const softDelete = (tbl: SoftTable, ids: string[]) => supabase.rpc('soft_delete', { tbl, ids })
+export const softDelete = (tbl: SoftTable, ids: string[]) => wrap(() => supabaseAdapter.trash.softDelete(tbl, ids))
 
 /** Undo of softDelete: clears deleted_at on those rows and on the children that were deleted with them. */
-export const restoreRows = (tbl: SoftTable, ids: string[]) => supabase.rpc('restore', { tbl, ids })
+export const restoreRows = (tbl: SoftTable, ids: string[]) => wrap(() => supabaseAdapter.trash.restore(tbl, ids))

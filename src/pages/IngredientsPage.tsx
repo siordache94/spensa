@@ -1,20 +1,10 @@
 import { useState } from 'react'
 import { Alert, Badge, Button, Center, Group, Loader, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
-import { useQuery } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
-import type { Tables } from '../lib/database.types.ts'
+import { useIngredients, type Ingredient } from '../lib/api/ingredients.ts'
 import IngredientForm from './IngredientForm.tsx'
 
-type Ingredient = Tables<'ingredients'>
-
-async function fetchIngredients(): Promise<Ingredient[]> {
-  const { data, error } = await supabase.from('ingredients').select('*').order('name')
-  if (error) throw error
-  return data
-}
-
 export default function IngredientsPage() {
-  const { data, isPending, error } = useQuery({ queryKey: ['ingredients'], queryFn: fetchIngredients })
+  const { data, isPending, error } = useIngredients()
   const [search, setSearch] = useState('')
   // undefined = form closed, null = adding, otherwise the ingredient being edited
   const [editing, setEditing] = useState<Ingredient | null | undefined>(undefined)

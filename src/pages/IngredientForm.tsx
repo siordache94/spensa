@@ -4,12 +4,9 @@ import { useMediaQuery } from '@mantine/hooks'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '../lib/supabase.ts'
-import { softDelete } from '../lib/softDelete.ts'
-import type { Tables, TablesInsert } from '../lib/database.types.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { deleteIngredient, saveIngredient, useIngredientUsage, type Ingredient } from '../lib/api/ingredients.ts'
 
-type Ingredient = Tables<'ingredients'>
 type Unit = Ingredient['unit']
 
 const UNITS: { value: Unit; label: string }[] = [
@@ -29,7 +26,6 @@ type Props = {
 }
 
 export default function IngredientForm({ ingredient, categories, onClose }: Props) {
-  const queryClient = useQueryClient()
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
 
   const [name, setName] = useState(ingredient?.name ?? '')
@@ -43,19 +39,7 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
   const dirty = useDirty({ name, unit, category, pack, shelf, min })
 
-  const usage = useQuery({
-    queryKey: ['ingredient-usage', ingredient?.id],
-    enabled: ingredient !== null,
-    queryFn: async () => {
-      if (!ingredient) return []
-      const { data, error } = await supabase
-        .from('recipe_ingredients')
-        .select('recipes(name)')
-        .eq('ingredient_id', ingredient.id)
-      if (error) throw error
-      return data.map((row) => row.recipes.name)
-    },
-  })
+  const usage = useIngredientUsage(ingredient?.id)
   const usedIn = usage.data ?? []
   const inUse = usedIn.length > 0
 
@@ -70,44 +54,20 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const invalidNumbers = !toTaste && !!(packError || shelfError || minError)
   const canSave = name.trim() !== '' && !invalidNumbers
 
-  const save = useMutation({
-    mutationFn: async (row: TablesInsert<'ingredients'>) => {
-      const { error } = ingredient
-        ? await supabase.from('ingredients').update(row).eq('id', ingredient.id)
-        : await supabase.from('ingredients').insert(row)
-      if (error?.code === '23505') throw new Error('An ingredient with this name already exists.')
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ingredients'] })
-      onClose()
-    },
-  })
-
-  const remove = useMutation({
-    mutationFn: async () => {
-      if (!ingredient) return
-      const { error } = await softDelete('ingredients', [ingredient.id])
-      if (error?.code === '23503') throw new Error('Remove it from these recipes to delete it.')
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ingredients'] })
-      onClose()
-    },
-  })
+  const save = useCommand(saveIngredient, { onSuccess: onClose })
+  const remove = useCommand(deleteIngredient, { onSuccess: onClose })
 
   function submit(e: FormEvent) {
     e.preventDefault()
     if (!canSave) return
-    save.mutate({
+    save.mutate({ id: ingredient?.id ?? null, row: {
       name: name.trim(),
       unit,
       category: category.trim() || null,
       pack_size: toTaste ? null : packValue,
       shelf_life_days: toTaste ? null : shelfValue,
       min_stock: toTaste ? null : minValue,
-    })
+    } })
   }
 
   const suffix = toTaste ? undefined : unit
@@ -176,7 +136,7 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
           <Stack gap="xs" mt="xs">
             {ingredient && (confirming ? (
               <Button.Group>
-                <Button color="red" fullWidth loading={remove.isPending} onClick={() => remove.mutate()}>Delete for good</Button>
+                <Button color="red" fullWidth loading={remove.isPending} onClick={() => ingredient && remove.mutate({ id: ingredient.id })}>Delete for good</Button>
                 <Button variant="default" fullWidth onClick={() => setConfirming(false)}>Keep</Button>
               </Button.Group>
             ) : (
