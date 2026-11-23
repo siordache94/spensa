@@ -85,7 +85,7 @@ reset role;
 do $$ begin
   assert (select deleted_by from public.shopping_items where id = '20000000-0000-0000-0000-000000000001') = '00000000-0000-0000-0000-00000000000a',
     'finish_shopping should soft-delete bought items';
-  assert (select count(*) from public.shopping_items where deleted_at is not null) = 2, 'expected two soft-deleted items (cleared + removed)';
+  assert (select count(*) from public.shopping_items where deleted_at is not null and household_id = (select household_id from public.household_members where user_id = '00000000-0000-0000-0000-00000000000a')) = 2, 'expected two soft-deleted items (cleared + removed)';
 end $$;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-00000000000a"}';
@@ -137,8 +137,8 @@ begin
 end $$;
 reset role;
 do $$ begin
-  assert (select count(*) from public.recipe_ingredients) = 3, 'expected 3 line rows (one soft-deleted)';
-  assert (select count(*) from public.recipe_ingredients where deleted_at is not null) = 1, 'expected 1 soft-deleted line';
+  assert (select count(*) from public.recipe_ingredients where household_id = (select household_id from public.household_members where user_id = '00000000-0000-0000-0000-00000000000a')) = 3, 'expected 3 line rows (one soft-deleted)';
+  assert (select count(*) from public.recipe_ingredients where deleted_at is not null and household_id = (select household_id from public.household_members where user_id = '00000000-0000-0000-0000-00000000000a')) = 1, 'expected 1 soft-deleted line';
 end $$;
 
 select 'RPC smoke test passed' as result;

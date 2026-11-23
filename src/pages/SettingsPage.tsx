@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMembers, useMyId } from '../lib/members.ts'
 import { supabase } from '../lib/supabase.ts'
+import { PrivacyAndData } from './AccountData.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
 
 function YourName() {
@@ -134,6 +135,8 @@ export default function SettingsPage() {
         />
         <Text size="sm" c="dimmed">Airy makes rows and tick boxes larger for one-handed use in the shop.</Text>
       </Stack>
+
+      <PrivacyAndData />
 
       <Text size="xs" c="dimmed">Build {__BUILD__}</Text>
     </Stack>

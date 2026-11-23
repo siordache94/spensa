@@ -20,6 +20,8 @@ export default function HouseholdPage() {
     supabase.auth.getSession().then(({ data }) => {
       const full = data.session?.user.user_metadata?.full_name
       if (typeof full === 'string') setYourName((cur) => cur || full.slice(0, 40))
+      const invite = data.session?.user.user_metadata?.invite_code
+      if (typeof invite === 'string') setCode((cur) => cur || invite)
     })
   }, [])
 

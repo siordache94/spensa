@@ -2,8 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { Alert, Button, Center, Divider, Paper, PasswordInput, Stack, TextInput, Title } from '@mantine/core'
 import { supabase } from '../lib/supabase.ts'
 
+const INVITE_ONLY = 'Spensa is invite-only. Ask a household member for an invite link.'
+
 export default function AuthPage() {
-  const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn')
+  const inviteFromLink = new URLSearchParams(window.location.search).get('invite') ?? ''
+  const [mode, setMode] = useState<'signIn' | 'signUp'>(inviteFromLink ? 'signUp' : 'signIn')
+  const [inviteCode, setInviteCode] = useState(inviteFromLink)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -29,9 +33,16 @@ export default function AuthPage() {
     const { error } =
       mode === 'signIn'
         ? await supabase.auth.signInWithPassword(credentials)
-        : await supabase.auth.signUp(credentials)
+        : await supabase.auth.signUp({
+            ...credentials,
+            options: { data: inviteCode.trim() ? { invite_code: inviteCode.trim() } : undefined },
+          })
     setBusy(false)
-    if (error) setError(error.message)
+    if (error) {
+      // The server's "before user created" hook refuses signups without an allowlisted email or valid invite code.
+      const refused = mode === 'signUp' && (error.status === 403 || error.message.includes('invite-only'))
+      setError(refused ? INVITE_ONLY : error.message)
+    }
   }
 
   const signingIn = mode === 'signIn'
@@ -61,6 +72,14 @@ export default function AuthPage() {
               value={password}
               onChange={(e) => setPassword(e.currentTarget.value)}
             />
+            {!signingIn && (
+              <TextInput
+                label="Invite code"
+                description="From your invite link or a household member. Not needed if your email was approved."
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.currentTarget.value)}
+              />
+            )}
             <Button type="submit" loading={busy}>
               {signingIn ? 'Sign in' : 'Create account'}
             </Button>

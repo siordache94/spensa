@@ -265,6 +265,20 @@ isOneToOne: false
       referencedColumns: ["household_id","id"]
     }
                   ]
+                },"signup_allowlist": {
+                  Row: {
+                    "email": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "email": string
+                  }
+                  Update: {
+                    "email"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"snapshot_batches": {
                   Row: {
                     "batch_id": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"qty": number,"snapshot_id": string,"updated_at": string | null,"updated_by": string | null
@@ -332,14 +346,23 @@ isOneToOne: false
 "default_member_name":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"export_my_data":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
 "finish_shopping":
 { Args: { "batches": Json,"on_date": string }; Returns: string
+                           },
+"hook_before_user_created":
+{ Args: { "event": Json }; Returns: Json
                            },
 "join_household":
 { Args: { "code": string,"display_name"?: string }; Returns: string
                            },
 "my_household":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"purge_user":
+{ Args: { "uid": string }; Returns: undefined
                            },
 "require_live":
 { Args: { "rid": string,"tbl": string }; Returns: undefined
