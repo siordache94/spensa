@@ -3,8 +3,9 @@ import { Alert, Badge, Box, Button, Card, Group, Loader, Menu, SimpleGrid, Stack
 import { usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { addDays, replay } from '../domain/replay.ts'
+import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
 import UseSoon from './UseSoon.tsx'
-import { MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
+import { CookModal, MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
 type Marker = { color: string; text: string }
@@ -13,6 +14,7 @@ type Dialog =
   | { kind: 'add'; target: Target }
   | { kind: 'portions'; meal: Meal }
   | { kind: 'move' | 'copy'; meal: Meal }
+  | { kind: 'cook'; meal: Meal }
   | { kind: 'slots' }
 
 const fmt = (d: string, opts: Intl.DateTimeFormatOptions) =>
@@ -26,6 +28,8 @@ export default function PlanPage() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const move = useWrite()
+  const me = useMyId()
+  const members = useMembers().data
 
   const start = today ? addDays(mondayOf(today), weekOffset * 7) : undefined
   const end = start ? addDays(start, 6) : undefined
@@ -118,12 +122,21 @@ export default function PlanPage() {
                             style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 4, cursor: 'pointer' }}
                           >
                             <Text size="sm">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</Text>
+                            {m.cook_id && (
+                              <span className="sp-cook">{(() => { const c = members?.find((x) => x.user_id === m.cook_id); return c ? memberLabel(c) : '…' })()}</span>
+                            )}
                             {(markers.get(m.id) ?? []).map((k, i) => (
                               <Badge key={i} color={k.color} size="xs" variant="light" style={{ height: 'auto', whiteSpace: 'normal' }}>{k.text}</Badge>
                             ))}
                           </Box>
                         </Menu.Target>
                         <Menu.Dropdown>
+                          {me && (
+                            <Menu.Item onClick={() => move.mutate(supabase.from('planned_meals').update({ cook_id: m.cook_id === me ? null : me }).eq('id', m.id))}>
+                              {m.cook_id === me ? "I won't cook" : "I'll cook"}
+                            </Menu.Item>
+                          )}
+                          <Menu.Item onClick={() => setDialog({ kind: 'cook', meal: m })}>Cook…</Menu.Item>
                           <Menu.Item onClick={() => setDialog({ kind: 'portions', meal: m })}>Change portions</Menu.Item>
                           <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
                           <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
@@ -148,6 +161,7 @@ export default function PlanPage() {
       {(dialog?.kind === 'move' || dialog?.kind === 'copy') && (
         <MoveCopyModal mode={dialog.kind} meal={dialog.meal} slots={household.slots} position={nextPosition} onClose={() => setDialog(null)} />
       )}
+      {dialog?.kind === 'cook' && <CookModal meal={dialog.meal} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'slots' && <SlotsModal slots={household.slots} onClose={() => setDialog(null)} />}
     </Stack>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Center, Paper, Stack, TextInput, Title } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase.ts'
@@ -7,8 +7,21 @@ export default function HouseholdPage() {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
+  const [yourName, setYourName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      const full = data.session?.user.user_metadata?.full_name
+      if (typeof full === 'string') setYourName((cur) => cur || full.slice(0, 40))
+    })
+  }, [])
+
+  const display_name = yourName.trim() || undefined
+  const nameField = (
+    <TextInput label="Your name" description="Shown as the cook on planned meals." maxLength={40} value={yourName} onChange={(e) => setYourName(e.currentTarget.value)} />
+  )
 
   async function run(call: () => PromiseLike<{ error: { message: string } | null }>) {
     setError(null)
@@ -26,20 +39,22 @@ export default function HouseholdPage() {
         {error && <Alert color="red">{error}</Alert>}
 
         <Paper p="lg" withBorder>
-          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('create_household', { name: name.trim() })) }}>
+          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('create_household', { name: name.trim(), display_name })) }}>
             <Stack>
               <Title order={3}>Create household</Title>
               <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+              {nameField}
               <Button type="submit" loading={busy} disabled={!name.trim()}>Create</Button>
             </Stack>
           </form>
         </Paper>
 
         <Paper p="lg" withBorder>
-          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('join_household', { code: code.trim() })) }}>
+          <form onSubmit={(e) => { e.preventDefault(); run(() => supabase.rpc('join_household', { code: code.trim(), display_name })) }}>
             <Stack>
               <Title order={3}>Join household</Title>
               <TextInput label="Invite code" value={code} onChange={(e) => setCode(e.currentTarget.value)} />
+              {nameField}
               <Button type="submit" loading={busy} disabled={!code.trim()}>Join</Button>
             </Stack>
           </form>

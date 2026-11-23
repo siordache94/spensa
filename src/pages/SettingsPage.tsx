@@ -1,12 +1,51 @@
-import { NumberInput, SegmentedControl, Stack, Text, Title } from '@mantine/core'
+import { useEffect, useState } from 'react'
+import { Button, Group, NumberInput, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMembers, useMyId } from '../lib/members.ts'
+import { supabase } from '../lib/supabase.ts'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
+
+function YourName() {
+  const queryClient = useQueryClient()
+  const me = useMyId()
+  const members = useMembers()
+  const saved = members.data?.find((m) => m.user_id === me)?.display_name ?? ''
+  const [value, setValue] = useState('')
+  useEffect(() => setValue(saved), [saved])
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('household_members').update({ display_name: value.trim() }).eq('user_id', me!)
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household', 'members'] }),
+    onError: (e) => notifications.show({ color: 'red', title: 'Could not save', message: e.message }),
+  })
+  const clean = value.trim()
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); save.mutate() }}>
+      <Group align="flex-end" wrap="nowrap">
+        <TextInput
+          style={{ flex: 1 }}
+          label="Your name"
+          description="Shown as the cook on planned meals. Shared with your household."
+          maxLength={40}
+          value={value}
+          onChange={(e) => setValue(e.currentTarget.value)}
+        />
+        <Button type="submit" loading={save.isPending} disabled={!me || !clean || clean === saved}>Save</Button>
+      </Group>
+    </form>
+  )
+}
 
 export default function SettingsPage() {
   const [settings, update] = useSettings()
   return (
     <Stack gap="xl" maw={480}>
       <Title order={2}>Settings</Title>
-      <Text size="sm" c="dimmed" mt={-12}>Saved on this device only.</Text>
+      <YourName />
+      <Text size="sm" c="dimmed">Theme, density and shopping horizon are saved on this device only.</Text>
 
       <Stack gap={6}>
         <Text fw={600} className="sp-label">Theme</Text>

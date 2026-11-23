@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Alert, Button, Loader, Modal, NumberInput, Select, Stack, TagsInput, Text } from '@mantine/core'
+import { Alert, Button, Loader, Modal, NumberInput, Radio, Select, Stack, TagsInput, Text } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { invalidatePantry } from '../lib/pantry.ts'
+import { memberLabel, useMembers } from '../lib/members.ts'
 import { supabase } from '../lib/supabase.ts'
 
 /** Runs a Supabase write, refreshes the pantry, reports failures in a notification. */
@@ -163,6 +164,37 @@ export function SlotsModal({ slots, onClose }: { slots: string[]; onClose: () =>
           loading={write.isPending}
           // household_id is not needed: RLS limits the update to the member's own household row
           onClick={() => write.mutate(supabase.from('households').update({ slots: clean }).not('id', 'is', null))}
+        >
+          Save
+        </Button>
+      </Stack>
+    </Modal>
+  )
+}
+
+/** Pick who cooks a meal, or nobody. */
+export function CookModal({ meal, onClose }: { meal: { id: string; cook_id: string | null }; onClose: () => void }) {
+  const isMobile = useMediaQuery('(max-width: 48em)')
+  const members = useMembers()
+  const [cook, setCook] = useState(meal.cook_id ?? '')
+  const write = useWrite(onClose)
+  return (
+    <Modal opened onClose={onClose} title="Who cooks?" fullScreen={isMobile}>
+      <Stack>
+        {members.error && <Alert color="red">{members.error.message}</Alert>}
+        {members.isPending ? (
+          <Loader />
+        ) : (
+          <Radio.Group value={cook} onChange={setCook} aria-label="Cook">
+            <Stack gap="sm">
+              <Radio value="" label="Nobody" size="md" />
+              {members.data?.map((m) => <Radio key={m.user_id} value={m.user_id} label={memberLabel(m)} size="md" />)}
+            </Stack>
+          </Radio.Group>
+        )}
+        <Button
+          loading={write.isPending}
+          onClick={() => write.mutate(supabase.from('planned_meals').update({ cook_id: cook || null }).eq('id', meal.id))}
         >
           Save
         </Button>

@@ -134,3 +134,21 @@ body {
 
 /* Button: filled yellow keeps ink text; label font weight */
 .sp-button { font-weight: 600; }
+
+/* Who cooks: small caps chip on a planned meal */
+.sp-cook {
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--sp-edge);
+  color: var(--sp-text);
+  font-family: var(--sp-label);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
