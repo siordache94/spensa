@@ -20,14 +20,36 @@ export const UNBUY_KEY = keys.mutations.unbuy()
 export const UN_ON_HAND_KEY = keys.mutations.unOnHand()
 export const UNCHECK_KEY = keys.mutations.uncheck()
 
-type Pantry = {
+export type Pantry = {
   events: { batches: { id: string; ingredientId: string; qty: number; addedOn: string; addedAt: string; recordedAt: string; expiresOn: string | null }[] }
   domainIngredients: { id: string; onHand: boolean }[]
   ingredients: { id: string; on_hand: boolean }[]
   batchAuthors?: Record<string, string | null>
 }
-type Items = { id: string; checked: boolean; bought_batch_id?: string | null }[]
+export type Items = { id: string; checked: boolean; bought_batch_id?: string | null }[]
 type Snapshot = [pantry: Pantry | undefined, items: Items | undefined]
+type Batch = Pantry['events']['batches'][number]
+
+// ---- Pure cache reducers: what the screen shows the moment a tick is made, before the write lands ----------------
+export const setOnHandInPantry = (p: Pantry, ingredientId: string, onHand: boolean): Pantry => ({
+  ...p,
+  domainIngredients: p.domainIngredients.map((i) => (i.id === ingredientId ? { ...i, onHand } : i)),
+  ingredients: p.ingredients.map((i) => (i.id === ingredientId ? { ...i, on_hand: onHand } : i)),
+})
+
+export const setCheckedInItems = (items: Items | undefined, itemId: string, checked: boolean): Items | undefined =>
+  items?.map((i) => (i.id === itemId ? { ...i, checked } : i))
+
+export const addBatchToPantry = (p: Pantry, batch: Batch, author: string | null): Pantry => ({
+  ...p,
+  events: { ...p.events, batches: [...p.events.batches, batch] },
+  batchAuthors: { ...p.batchAuthors, [batch.id]: author },
+})
+
+export const removeBatchFromPantry = (p: Pantry, batchId: string): Pantry => ({
+  ...p,
+  events: { ...p.events, batches: p.events.batches.filter((b) => b.id !== batchId) },
+})
 
 /** Cancel in-flight fetches, apply `change` to both caches, and return the old values for rollback. */
 async function optimistic(qc: QueryClient, change: (p: Pantry, items: Items | undefined) => [Pantry, Items | undefined]): Promise<Snapshot> {
@@ -49,6 +71,43 @@ const rollback = (qc: QueryClient, old: Snapshot | undefined) => {
 
 const fail = (e: Error) => notifications.show({ color: 'red', message: e.message })
 
+/** After any shop tick settles, refetch the pantry and the list. Not while other ticks are still queued: that would undo them. */
+const refreshAfterTick = (qc: QueryClient) => {
+  if (qc.isMutating({ mutationKey: SHOP_KEY }) > 1) return
+  void invalidateKeys(qc, [keys.pantry.all(), keys.shop.items()])
+}
+
+/**
+ * A reversible tick: the write, and the cache change it shows at once. The pair of a tick and its undo is one
+ * `switch(on)` with the boolean flipped, so each pair is built by one helper and registered under its own key.
+ */
+type Switch = {
+  write: (api: DataPort, id: string) => Promise<void>
+  change: (p: Pantry, items: Items | undefined, id: string) => [Pantry, Items | undefined]
+}
+
+/** The on-hand switch on the Shop tab: ticking a "to taste" row marks the ingredient on hand. `on` = true for the tick, false for the undo. */
+export const onHandSwitch = (on: boolean): Switch => ({
+  write: (api, id) => api.ingredients.setOnHand(id, on),
+  change: (p, _items, id) => [setOnHandInPantry(p, id, on), undefined],
+})
+
+/** The tick on a free-text item (checked = in the cart) and its undo ("put back"). */
+export const checkSwitch = (checked: boolean): Switch => ({
+  write: (api, id) => api.shop.setChecked(id, checked),
+  change: (p, items, id) => [p, setCheckedInItems(items, id, checked)],
+})
+
+const defineSwitch = (qc: QueryClient, api: DataPort, s: Switch) => ({
+  mutationFn: (id: string) => s.write(api, id),
+  onMutate: (id: string) => optimistic(qc, (p, items) => s.change(p, items, id)),
+  onError: (e: Error, _id: string, old: Snapshot | undefined) => {
+    rollback(qc, old)
+    fail(e)
+  },
+  onSettled: () => refreshAfterTick(qc),
+})
+
 /**
  * Registers the mutationFn of every shop mutation on the client, by mutation key.
  *
@@ -60,12 +119,6 @@ const fail = (e: Error) => notifications.show({ color: 'red', message: e.message
  * Tests pass the fake adapter.
  */
 export function registerShopMutations(qc: QueryClient, api: DataPort) {
-  const settled = () => {
-    // Refetching while other ticks are still queued would briefly undo them.
-    if (qc.isMutating({ mutationKey: SHOP_KEY }) > 1) return
-    void invalidateKeys(qc, [keys.pantry.all(), keys.shop.items()])
-  }
-
   qc.setMutationDefaults(BUY_KEY, {
     mutationFn: async (b: Buy) => {
       const { itemFound } = await api.shop.buy(b)
@@ -79,7 +132,7 @@ export function registerShopMutations(qc: QueryClient, api: DataPort) {
         const tz = qc.getQueryData<{ timezone: string }>(keys.household.settings())?.timezone ?? 'UTC'
         const batch = { id: b.batchId, ingredientId: b.ingredientId, qty: b.qty, addedOn: localDay(new Date(), tz), addedAt: b.addedAt, recordedAt: UNSYNCED, expiresOn: b.expiresOn }
         return [
-          { ...p, events: { ...p.events, batches: [...p.events.batches, batch] }, batchAuthors: { ...p.batchAuthors, [b.batchId]: me } },
+          addBatchToPantry(p, batch, me),
           b.shoppingItemId ? markBought(items ?? [], b.shoppingItemId, b.batchId) : undefined,
         ]
       })
@@ -88,88 +141,26 @@ export function registerShopMutations(qc: QueryClient, api: DataPort) {
       rollback(qc, old)
       fail(e)
     },
-    onSettled: settled,
+    onSettled: () => refreshAfterTick(qc),
   })
 
-  qc.setMutationDefaults(ON_HAND_KEY, {
-    mutationFn: async (ingredientId: string) => {
-      await api.ingredients.setOnHand(ingredientId, true)
-    },
-    onMutate: (id: string) =>
-      optimistic(qc, (p) => [
-        {
-          ...p,
-          domainIngredients: p.domainIngredients.map((i) => (i.id === id ? { ...i, onHand: true } : i)),
-          ingredients: p.ingredients.map((i) => (i.id === id ? { ...i, on_hand: true } : i)),
-        },
-        undefined,
-      ]),
-    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
-      rollback(qc, old)
-      fail(e)
-    },
-    onSettled: settled,
-  })
-
-  qc.setMutationDefaults(CHECK_KEY, {
-    mutationFn: async (id: string) => {
-      await api.shop.setChecked(id, true)
-    },
-    onMutate: (id: string) => optimistic(qc, (p, items) => [p, items?.map((i) => (i.id === id ? { ...i, checked: true } : i))]),
-    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
-      rollback(qc, old)
-      fail(e)
-    },
-    onSettled: settled,
-  })
-
-  // Untick: undo a tick done by mistake.
+  // Untick: undo a tick done by mistake. Deletes the batch (cascading its snapshot rows and adjustments) and puts
+  // its list item, if any, back on the list.
   qc.setMutationDefaults(UNBUY_KEY, {
-    // Deletes the batch (cascading its snapshot rows and adjustments) and puts its list item, if any, back on the list.
     mutationFn: async (batchId: string) => {
       await api.shop.unbuy(batchId)
     },
     onMutate: (batchId: string) =>
-      optimistic(qc, (p, items) => [
-        { ...p, events: { ...p.events, batches: p.events.batches.filter((b) => b.id !== batchId) } },
-        items && restoreBought(items, batchId),
-      ]),
+      optimistic(qc, (p, items) => [removeBatchFromPantry(p, batchId), items && restoreBought(items, batchId)]),
     onError: (e: Error, _id: string, old: Snapshot | undefined) => {
       rollback(qc, old)
       fail(e)
     },
-    onSettled: settled,
+    onSettled: () => refreshAfterTick(qc),
   })
 
-  qc.setMutationDefaults(UN_ON_HAND_KEY, {
-    mutationFn: async (ingredientId: string) => {
-      await api.ingredients.setOnHand(ingredientId, false)
-    },
-    onMutate: (id: string) =>
-      optimistic(qc, (p) => [
-        {
-          ...p,
-          domainIngredients: p.domainIngredients.map((i) => (i.id === id ? { ...i, onHand: false } : i)),
-          ingredients: p.ingredients.map((i) => (i.id === id ? { ...i, on_hand: false } : i)),
-        },
-        undefined,
-      ]),
-    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
-      rollback(qc, old)
-      fail(e)
-    },
-    onSettled: settled,
-  })
-
-  qc.setMutationDefaults(UNCHECK_KEY, {
-    mutationFn: async (id: string) => {
-      await api.shop.setChecked(id, false)
-    },
-    onMutate: (id: string) => optimistic(qc, (p, items) => [p, items?.map((i) => (i.id === id ? { ...i, checked: false } : i))]),
-    onError: (e: Error, _id: string, old: Snapshot | undefined) => {
-      rollback(qc, old)
-      fail(e)
-    },
-    onSettled: settled,
-  })
+  qc.setMutationDefaults(ON_HAND_KEY, defineSwitch(qc, api, onHandSwitch(true)))
+  qc.setMutationDefaults(UN_ON_HAND_KEY, defineSwitch(qc, api, onHandSwitch(false)))
+  qc.setMutationDefaults(CHECK_KEY, defineSwitch(qc, api, checkSwitch(true)))
+  qc.setMutationDefaults(UNCHECK_KEY, defineSwitch(qc, api, checkSwitch(false)))
 }

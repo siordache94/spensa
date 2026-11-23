@@ -2,7 +2,13 @@
 // It mirrors the server rules the app relies on (soft delete hides rows, unique names, FK-style delete guard),
 // not the SQL. Add behaviour here only when a test needs it, and keep it as dumb as the real thing is smart.
 import type { Tables } from '../database.types.ts'
-import { ApiError, type DataPort, type HouseholdSettings, type PantryMealRow, type PantrySnapshotRow, type Recipe } from './port.ts'
+import type { FinishAnswer } from '../../domain/checkinAnswers.ts'
+import type { PantryEdits } from '../../domain/pantryEdits.ts'
+import { mealLinesPayload } from '../../domain/mealLines.ts'
+import type { MealAmount } from '../../domain/replay.ts'
+import {
+  ApiError, type DataPort, type HouseholdSettings, type PantryMealRow, type PantrySnapshotRow, type Recipe, type SnapshotBatch, type UnreadCheckinRow,
+} from './port.ts'
 
 export type FakeState = {
   userId: string | null
@@ -16,12 +22,20 @@ export type FakeState = {
   snapshot: PantrySnapshotRow | undefined
   shoppingItems: Tables<'shopping_items'>[]
   recipes: Recipe[]
+  /** Unread meal check-ins, oldest first (what checkins.unread returns). */
+  unreadCheckins: UnreadCheckinRow[]
+  /** What pantry.saveEdits was called with, in order. */
+  savedEdits: PantryEdits[]
+  /** What checkins.finishShopping was called with, in order. */
+  finishedShopping: { onDate: string; batches: SnapshotBatch[]; answers: FinishAnswer[] }[]
 }
 
 export type FakeApi = DataPort & {
   state: FakeState
   /** Every port call as 'group.method', in order. Assert on it to see what a page did. */
   calls: string[]
+  /** Makes the household events feed fire, as a partner's write would. `by` = the writer's user id. */
+  emitHouseholdEvent(by: string | null): void
   /** Make the next call of 'group.method' throw. Fires once. */
   failNext(call: string, error?: Error): void
 }
@@ -60,9 +74,11 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     userId: 'u1',
     household: { id: 'h1', timezone: 'UTC', expiring_days: 3, horizon_days: 7, slots: ['lunch', 'dinner'], slot_end_times: {} },
     ingredients: [], recipeLines: [], batches: [], meals: [], adjustments: [], snapshot: undefined, shoppingItems: [], recipes: [],
+    unreadCheckins: [], savedEdits: [], finishedShopping: [],
     ...seed,
   }
   const calls: string[] = []
+  const listeners = new Set<(by: string | null) => void>()
   const failures = new Map<string, Error>()
   /** Wraps every method of one port group: logs the call, can be made to fail, and returns a promise. Methods may be sync. */
   const track = <K extends keyof DataPort>(
@@ -168,8 +184,21 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         snapshot: state.snapshot,
         ingredients: live(state.ingredients),
       }),
+      saveEdits: (edits) => { state.savedEdits.push(edits) },
     }),
     shop: track('shop', {
+      list: () =>
+        live(state.shoppingItems).map((i) => {
+          const ing = state.ingredients.find((x) => x.id === i.ingredient_id)
+          return { ...i, ingredients: ing ? { name: ing.name, unit: ing.unit, category: ing.category } : null }
+        }),
+      addItem: (item) => {
+        state.shoppingItems.push(row.shoppingItem(item))
+      },
+      setMealSkip: (mealId, skip) => {
+        const m = state.meals.find((x) => x.id === mealId)
+        if (m) m.skip_shopping = skip
+      },
       buy: (b) => {
         if (!state.batches.some((x) => x.id === b.batchId)) {
           state.batches.push(row.batch({ id: b.batchId, ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn, added_at: b.addedAt }))
@@ -187,6 +216,39 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         for (const i of state.shoppingItems) if (i.bought_batch_id === batchId) { i.checked = false; i.bought_batch_id = null }
       },
     }),
+    checkins: track('checkins', {
+      unread: () => [...state.unreadCheckins],
+      // shortcut: the answer itself is not recorded; only whether the check-in was cleared
+      answer: (mealId) => {
+        const idx = state.unreadCheckins.findIndex((c) => c.planned_meals?.id === mealId)
+        if (idx < 0) return false
+        state.unreadCheckins.splice(idx, 1)
+        return true
+      },
+      setNotCooked: (mealId, notCooked) => {
+        const m = state.meals.find((x) => x.id === mealId)
+        if (m) m.not_cooked = notCooked
+        // the database trigger: "didn't cook" answers the meal's unread check-in
+        if (notCooked) state.unreadCheckins = state.unreadCheckins.filter((c) => c.planned_meals?.id !== mealId)
+      },
+      saveMealLines: (mealId, lines: MealAmount[]) => {
+        const m = state.meals.find((x) => x.id === mealId)
+        const payload = mealLinesPayload(lines)
+        if (m) m.planned_meal_lines = payload.map((l) => ({ ingredient_id: l.ingredient_id, qty_total: l.qty_total }))
+      },
+      slotEndTimes: () => ({ slots: state.household.slots, slot_end_times: state.household.slot_end_times }),
+      saveSlotEndTimes: (times) => { state.household.slot_end_times = times },
+      finishShopping: (onDate, batches, answers) => {
+        state.finishedShopping.push({ onDate, batches, answers })
+        state.unreadCheckins = []
+      },
+    }),
+    live: {
+      subscribeHouseholdEvents: (_topic: string, onEvent: (by: string | null) => void) => {
+        listeners.add(onEvent)
+        return () => { listeners.delete(onEvent) }
+      },
+    },
     trash: track('trash', {
       softDelete: (table, ids) => {
         if (table === 'ingredients') {
@@ -203,15 +265,22 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
           for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = NOW; syncRecipeLines(r) }
         }
         if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = NOW
+        if (table === 'shopping_items') for (const i of state.shoppingItems) if (ids.includes(i.id)) i.deleted_at = NOW
         // shortcut: the other tables are not faked yet; add them with the first test that needs them
       },
       restore: (table, ids) => {
         if (table === 'ingredients') for (const i of state.ingredients) if (ids.includes(i.id)) i.deleted_at = null
         if (table === 'recipes') for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = null; syncRecipeLines(r) }
         if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = null
+        if (table === 'shopping_items') for (const i of state.shoppingItems) if (ids.includes(i.id)) i.deleted_at = null
       },
     }),
   }
 
-  return { ...api, state, calls, failNext: (call, error = new Error(`fake failure: ${call}`)) => void failures.set(call, error) }
+  return {
+    ...api,
+    state,
+    calls,
+    emitHouseholdEvent: (by) => { for (const l of listeners) l(by) },
+    failNext: (call, error = new Error(`fake failure: ${call}`)) => void failures.set(call, error) }
 }

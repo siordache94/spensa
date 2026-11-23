@@ -1,7 +1,10 @@
 // Pantry aggregate: the raw facts for the Planner, Pantry and Shopping tabs, and what makes them stale.
-import { useQuery, type QueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query'
 import { buildEvents, buildIngredients, localDay } from '../../domain/pantryRows.ts'
-import type { Day } from '../../domain/replay.ts'
+import type { PantryEdits } from '../../domain/pantryEdits.ts'
+import { expiringSoon, replay, stockByIngredient as stockOf, type Day } from '../../domain/replay.ts'
+import { defineCommand, runCommand } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import type { DataPort } from './port.ts'
@@ -41,5 +44,39 @@ export function usePantry() {
   }
 }
 
+/**
+ * The pantry's facts plus the stock replayed once, as of today. The Pantry, Use-soon and Shop screens read stock from
+ * here; a component never calls replay() itself. Memoized on (events, today): a refetch with the same facts is free.
+ */
+export function usePantryState() {
+  const pantry = usePantry()
+  const { events, household, today } = pantry
+  const replayed = useMemo(() => (events && today ? replay(events, today) : undefined), [events, today])
+  const remaining = replayed?.remaining
+  const stockByIngredient = useMemo(() => (events && remaining ? stockOf(events, remaining) : undefined), [events, remaining])
+  const expiring = useMemo(
+    () => (events && remaining && today && household ? expiringSoon(events, remaining, today, household.expiring_days) : undefined),
+    [events, remaining, today, household],
+  )
+  return { ...pantry, remaining, shortfalls: replayed?.shortfalls, consumed: replayed?.consumed, stockByIngredient, expiring }
+}
+
 /** For commands not yet migrated to defineCommand (`invalidates: () => [keys.pantry.all()]` is the target form). */
 export const invalidatePantry = (queryClient: QueryClient) => queryClient.invalidateQueries({ queryKey: keys.pantry.all() })
+
+/** The pantry editor's save: only the changed lines (see diffEdits). */
+export const savePantryEdits = defineCommand<PantryEdits>({
+  name: 'pantry.saveEdits',
+  run: (api, edits) => api.pantry.saveEdits(edits),
+  invalidates: () => [keys.pantry.all()],
+})
+
+/**
+ * savePantryEdits for the editor, which leaves edit mode only after the refetch (so the amounts never flash back to the
+ * old ones). Same invalidation as the command; the difference is that this one waits for it.
+ */
+export function useSavePantryEdits(options: Omit<UseMutationOptions<void, Error, PantryEdits>, 'mutationFn'> = {}) {
+  const api = useApi()
+  const qc = useQueryClient()
+  return useMutation({ ...options, mutationFn: (edits: PantryEdits) => runCommand(qc, api, savePantryEdits, edits) })
+}

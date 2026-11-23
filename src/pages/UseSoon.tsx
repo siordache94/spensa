@@ -1,24 +1,21 @@
 import { useMemo } from 'react'
 import { Badge, Group, Paper, Stack, Text, Title } from '@mantine/core'
 import dayjs from 'dayjs'
-import { usePantry } from '../lib/pantry.ts'
-import { expiringSoon, replay } from '../domain/replay.ts'
-
-const round1 = (n: number) => Math.round(n * 10) / 10
+import { usePantryState } from '../lib/api/pantry.ts'
+import { round1 } from '../lib/format.ts'
 
 export default function UseSoon() {
-  const { events, ingredients, household, today: day } = usePantry()
+  const { expiring, remaining, ingredients, today: day } = usePantryState()
 
   const items = useMemo(() => {
-    if (!events || !ingredients || !household || !day) return []
-    const { remaining } = replay(events, day)
+    if (!expiring || !remaining || !ingredients) return []
     const byId = new Map(ingredients.map((i) => [i.id, i]))
-    return expiringSoon(events, remaining, day, household.expiring_days).map((batch) => ({
+    return expiring.map((batch) => ({
       batch,
       amount: remaining.get(batch.id) ?? 0,
       ingredient: byId.get(batch.ingredientId),
     }))
-  }, [events, ingredients, household, day])
+  }, [expiring, remaining, ingredients])
 
   if (!day || items.length === 0) return null
 

@@ -3,52 +3,36 @@ import { ActionIcon, Alert, Autocomplete, Button, Center, Checkbox, Group, Loade
 import { DatePickerInput, type DateValue } from '@mantine/dates'
 import { IconPencil } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { uuid } from '../lib/uuid.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
-import { invalidatePantry, usePantry } from '../lib/pantry.ts'
-import { supabase } from '../lib/supabase.ts'
-import { softDelete } from '../lib/softDelete.ts'
-import { toBuy } from '../lib/shopList.ts'
+import { useCommand } from '../lib/api/command.ts'
+import { usePantryState } from '../lib/api/pantry.ts'
+import { useApi } from '../lib/api/context.tsx'
+import { keys } from '../lib/api/keys.ts'
+import { addShoppingItem, clearCheckedItems, refreshShop, setMealSkipShopping, useShoppingItems } from '../lib/api/shop.ts'
+import { finishShopping } from '../lib/api/checkins.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
 import { memberLabel, useMembers } from '../lib/members.ts'
-import { finishShopping, invalidateCheckins, slotLabel, useUnreadCheckins } from '../lib/checkins.ts'
+import { slotLabel, useUnreadCheckins } from '../lib/checkins.ts'
 import { changeMessage, diffToBuy, loadAcked, relativeTime, saveAcked, selectedMealIds, tripRange } from '../lib/trip.ts'
-import { itemKey, needKey, resolvedKeys } from '../domain/toBuy.ts'
-import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
-import { finishAnswers, markNotCooked } from '../domain/checkinAnswers.ts'
+import { resolvedKeys } from '../domain/toBuy.ts'
+import { shoppingList, type Day, type Need } from '../domain/replay.ts'
+import { buildShoppingView, snapshotPlan, type BuyDraft, type Tick, type Untick } from '../domain/shoppingView.ts'
+import { round3 } from '../lib/format.ts'
 import './shop.css'
 
 
-// What the UI builds; ticking adds the batch id and time (see shopMutations.ts).
-type Buy = Omit<BuyVars, 'batchId' | 'addedAt'>
-
-// One row on the list. `buy` is set for rows with a quantity (the pencil at the row end changes it).
-type Entry = {
-  key: string
-  name: string
-  category: string | null // null = uncategorised
-  note?: string
-  figure?: string
-  unit?: string
-  free?: string // text in the amount column instead of a figure, e.g. "to taste"
-  pack?: string
-  buy?: Buy
-  onTick: () => void
-}
+type Buy = BuyDraft
 
 type Meal = { id: string; date: Day; slot: string; portions: number; position: number; skip_shopping: boolean; recipes: { name: string } | null }
 
 const withIds = (b: Buy): BuyVars => ({ ...b, batchId: uuid(), addedAt: new Date().toISOString() })
-const STORE_WALK = ['produce', 'dairy', 'meat', 'fish', 'dry goods', 'frozen']
-const round1 = (n: number) => Math.round(n * 10) / 10
-const round3 = (n: number) => Math.round(n * 1000) / 1000
 const dayOf = (v: DateValue) => (v ? dayjs(v).format('YYYY-MM-DD') : null)
-const packLabel = (packs: number | null) => (packs ? `≈ ${packs} ${packs === 1 ? 'pack' : 'packs'}` : undefined)
 const dayName = (d: Day) => dayjs(d).format('ddd D')
 
 function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean; onBuy: (b: Buy) => void; onClose: () => void }) {
@@ -163,22 +147,13 @@ function Setup({ meals, slots, today, horizon, onSkip, onDone }: {
 
 export default function ShopPage() {
   const queryClient = useQueryClient()
-  const pantry = usePantry()
-  const { events, domainIngredients, ingredients, today } = pantry
+  const api = useApi()
+  const pantry = usePantryState()
+  const { events, domainIngredients, ingredients, today, remaining } = pantry
   const members = useMembers()
   const waiting = useWaitingShopMutations()
 
-  const items = useQuery({
-    queryKey: ['shopping_items'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('shopping_items')
-        .select('*, ingredients(name, unit, category)')
-        .order('created_at')
-      if (error) throw error
-      return data
-    },
-  })
+  const items = useShoppingItems()
 
   // Live sync. Soft deletes are UPDATEs of rows RLS then hides, so row events never reach the other phone
   // (ADR 0003). Every write also touches the household's `household_events` row; any change to it refetches.
@@ -202,24 +177,19 @@ export default function ShopPage() {
       baseline = null
       if (msg) notifications.show({ id: 'partner-list', message: msg })
     }
-    const channel = supabase.channel('household-events')
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'household_events' }, (p) => {
-      invalidatePantry(queryClient)
-      queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
-      queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
-      const by = (p.new as { by?: string | null }).by ?? null
+    const unsubscribe = api.live.subscribeHouseholdEvents('household-events', (by) => {
+      void refreshShop(queryClient)
       if (!by || by === meRef.current) return
       baseline ??= keysRef.current // taken before the refetch lands
       who = by
       clearTimeout(timer)
       timer = setTimeout(flush, 3000) // combine changes that arrive close together
     })
-    channel.subscribe()
     return () => {
       clearTimeout(timer)
-      void supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [queryClient])
+  }, [queryClient, api])
 
   const [editing, setEditing] = useState(false)
   const [acked, setAcked] = useState<string[]>(loadAcked)
@@ -233,10 +203,10 @@ export default function ShopPage() {
   const [notCooked, setNotCooked] = useState<Set<string>>(() => new Set()) // unread meals the finish dialog marks "didn't cook"
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => { meRef.current = data.session?.user.id ?? null; setMe(meRef.current) })
+    void api.auth.currentUserId().then((id) => { meRef.current = id; setMe(id) })
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
-  }, [])
+  }, [api])
 
   // The trip is inferred from household data, so both phones see the same list.
   const horizon = pantry.household?.horizon_days ?? 7
@@ -262,7 +232,6 @@ export default function ShopPage() {
 
   const names = (ingredients ?? []).map((i) => i.name)
 
-  const invalidateItems = () => queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
   const showError = (e: Error) => notifications.show({ color: 'red', message: e.message })
 
   const buy = useMutation<void, Error, BuyVars>({ mutationKey: BUY_KEY })
@@ -273,163 +242,66 @@ export default function ShopPage() {
   const unOnHand = useMutation<void, Error, string>({ mutationKey: UN_ON_HAND_KEY })
   const uncheck = useMutation<void, Error, string>({ mutationKey: UNCHECK_KEY })
 
-  const clearChecked = useMutation({
-    mutationFn: async () => {
-      const ids = (items.data ?? []).filter((i) => i.checked).map((i) => i.id)
-      const { error } = await softDelete('shopping_items', ids)
-      if (error) throw new Error(error.message)
-    },
-    onSettled: () => invalidateItems(),
-    onError: showError,
-  })
+  const clearChecked = useCommand(clearCheckedItems, { onError: showError })
 
-  const addItem = useMutation({
-    mutationFn: async (value: string) => {
-      const match = (ingredients ?? []).find((i) => i.name.toLowerCase() === value.toLowerCase())
-      const { error } = await supabase
-        .from('shopping_items')
-        .insert(match ? { ingredient_id: match.id } : { text: value })
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: () => setText(''),
-    onSettled: () => invalidateItems(),
-    onError: showError,
-  })
+  const addItem = useCommand(addShoppingItem, { onSuccess: () => setText(''), onError: showError })
 
-  const setSkip = useMutation({
-    mutationFn: async ({ id, skip }: { id: string; skip: boolean }) => {
-      const { error } = await supabase.from('planned_meals').update({ skip_shopping: skip }).eq('id', id)
-      if (error) throw new Error(error.message)
-    },
-    onMutate: ({ id, skip }) => {
+  const setSkip = useCommand(setMealSkipShopping, {
+    onMutate: ({ mealId, skip }) => {
       // tick instantly; the refetch confirms it
-      queryClient.setQueryData<{ meals: Meal[] }>(['pantry'], (d) => d && { ...d, meals: d.meals.map((m) => (m.id === id ? { ...m, skip_shopping: skip } : m)) })
+      queryClient.setQueryData<{ meals: Meal[] }>(keys.pantry.all(), (d) => d && { ...d, meals: d.meals.map((m) => (m.id === mealId ? { ...m, skip_shopping: skip } : m)) })
     },
-    onSettled: () => invalidatePantry(queryClient),
     onError: showError,
   })
 
-  const snapshot = useMutation({
-    mutationFn: async () => {
-      if (!events || !today) throw new Error('Still loading, try again.')
-      // unread check-ins are answered here: a meal marked "didn't cook" consumes nothing, so the snapshot must not count it
-      const answers = finishAnswers(unread.items.map((u) => u.mealId), notCooked)
-      const skipped = new Set(answers.filter((a) => a.answer === 'not_cooked').map((a) => a.meal_id))
-      const { remaining } = replay(markNotCooked(events, skipped), today)
-      const batches = [...remaining]
-        .filter(([, qty]) => qty > 0)
-        .map(([batchId, qty]) => ({ batch_id: batchId, qty: round3(qty) }))
-      await finishShopping(today, batches, answers)
-    },
+  const snapshot = useCommand(finishShopping, {
     onSuccess: () => { setSnapshotOpen(false); setEditing(false) },
-    onSettled: () => { invalidatePantry(queryClient); invalidateCheckins(queryClient) },
     onError: showError,
   })
+
+  function saveSnapshot() {
+    if (!events || !today || !remaining) return showError(new Error('Still loading, try again.'))
+    // unread check-ins are answered here: a meal marked "didn't cook" consumes nothing, so the snapshot must not count it
+    const { answers, batches } = snapshotPlan({ events, today, remaining, unreadMealIds: unread.items.map((u) => u.mealId), notCooked })
+    snapshot.mutate({ onDate: today, batches, answers })
+  }
 
   const { mutate: mutateOnHand } = markOnHand
   const { mutate: mutateCheck } = checkText
 
-  const entries = useMemo<Entry[]>(() => {
-    if (!ingredients || !today) return []
-    const byId = new Map(ingredients.map((i) => [i.id, i]))
-    const expiryFor = (shelfLifeDays: number | null) => (shelfLifeDays ? addDays(today, shelfLifeDays) : null)
-    const out: Entry[] = []
+  const view = useMemo(
+    () => buildShoppingView({
+      needs,
+      stapleIds,
+      ingredients: ingredients ?? [],
+      items: items.data ?? [],
+      batches: events?.batches ?? [],
+      authors: pantry.batchAuthors ?? {},
+      today: today ?? '',
+      me,
+      acked,
+      tasted,
+    }),
+    [needs, stapleIds, ingredients, items.data, events, pantry.batchAuthors, today, me, acked, tasted],
+  )
+  const { groups, entries, cart, partnerLast, checkedTextCount } = view
 
-    for (const n of needs) {
-      const ing = byId.get(n.ingredientId)
-      if (!ing) continue
-      if (n.qty === null) {
-        out.push({ key: needKey(n.ingredientId), name: ing.name, category: ing.category, free: 'to taste', onTick: () => { setTasted((t) => [...t, n.ingredientId]); mutateOnHand(n.ingredientId) } })
-        continue
-      }
-      const b: Buy = {
-        ingredientId: n.ingredientId,
-        name: ing.name,
-        unit: ing.unit,
-        qty: round3(Math.max(n.qty, ing.pack_size ?? 0)),
-        expiresOn: expiryFor(ing.shelf_life_days),
-      }
-      out.push({
-        key: needKey(n.ingredientId),
-        name: ing.name,
-        category: ing.category,
-        note: stapleIds.has(n.ingredientId) ? 'Staple, below min stock' : undefined,
-        figure: `${round1(n.qty)}`,
-        unit: ing.unit,
-        pack: packLabel(n.packs),
-        buy: b,
-        onTick: () => mutateBuy(withIds(b)),
-      })
-    }
+  /** Runs a row's tick: the offline-capable write, or the to-taste bookkeeping first. */
+  function runTick(t: Tick) {
+    if (t.kind === 'buy') mutateBuy(withIds(t.buy))
+    else if (t.kind === 'toTaste') { setTasted((prev) => [...prev, t.ingredientId]); mutateOnHand(t.ingredientId) }
+    else mutateCheck(t.itemId)
+  }
 
-    for (const item of toBuy(items.data ?? [])) {
-      if (item.ingredient_id) {
-        const ing = byId.get(item.ingredient_id)
-        if (!ing || !item.ingredients) continue
-        const b: Buy = {
-          ingredientId: item.ingredient_id,
-          name: item.ingredients.name,
-          unit: item.ingredients.unit,
-          qty: round3(item.qty ?? ing.pack_size ?? 1),
-          expiresOn: expiryFor(ing.shelf_life_days),
-          shoppingItemId: item.id,
-        }
-        out.push({
-          key: itemKey(item.id),
-          name: item.ingredients.name,
-          category: item.ingredients.category,
-          figure: item.qty ? `${round1(item.qty)}` : undefined,
-          unit: item.qty ? item.ingredients.unit : undefined,
-          buy: b,
-          onTick: () => mutateBuy(withIds(b)),
-        })
-      } else if (!item.checked) {
-        out.push({ key: itemKey(item.id), name: item.text ?? '', category: null, onTick: () => mutateCheck(item.id) })
-      }
-    }
-
-    return out.sort((a, b) => a.name.localeCompare(b.name))
-  }, [ingredients, today, needs, stapleIds, items.data, mutateBuy, mutateOnHand, mutateCheck])
-
-  const groups = useMemo(() => {
-    const byCategory = new Map<string | null, Entry[]>()
-    for (const e of entries) {
-      // a real "other" category and uncategorised items share the one closing group
-      const key = e.category === null || e.category.toLowerCase() === 'other' ? null : e.category
-      byCategory.set(key, [...(byCategory.get(key) ?? []), e])
-    }
-    const walk = (c: string) => STORE_WALK.indexOf(c.toLowerCase())
-    const known = (c: string) => (walk(c) === -1 ? STORE_WALK.length : walk(c))
-    const named = [...byCategory.entries()].filter(([c]) => c !== null) as [string, Entry[]][]
-    named.sort(([a], [b]) => known(a) - known(b) || a.localeCompare(b))
-    const other = byCategory.get(null)
-    return [...named, ...(other ? [[null, other] as [null, Entry[]]] : [])] as [string | null, Entry[]][]
-  }, [entries])
+  function runUntick(u: Untick) {
+    if (u.kind === 'unbuy') unbuy.mutate(u.batchId)
+    else if (u.kind === 'unOnHand') unOnHand.mutate(u.ingredientId)
+    else uncheck.mutate(u.itemId)
+  }
 
   // Feeds the partner-change toast: keys now on the list, and keys that left it because they were bought.
   useEffect(() => { keysRef.current = entries.map((e) => e.key) }, [entries])
 
-  const checkedTexts = (items.data ?? []).filter((i) => !i.ingredient_id && i.checked)
-  const byId = new Map((ingredients ?? []).map((i) => [i.id, i]))
-  const authors = pantry.batchAuthors ?? {}
-  const todaysBatches = [...(events?.batches ?? [])]
-    .filter((b) => b.addedOn === today && byId.has(b.ingredientId))
-    .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
-  const byPartner = (id: string) => !!me && !!authors[id] && authors[id] !== me
-  const cart = [
-    ...todaysBatches.map((b) => {
-      const ing = byId.get(b.ingredientId)!
-      const partner = byPartner(b.id)
-      return {
-        key: `batch-${b.id}`, id: b.id, name: ing.name, figure: `${round1(b.qty)}`, unit: ing.unit, free: undefined as string | undefined,
-        held: partner && !acked.includes(b.id), at: partner ? b.addedAt : undefined, untick: () => unbuy.mutate(b.id),
-      }
-    }),
-    ...tasted
-      .filter((id) => byId.get(id)?.on_hand)
-      .map((id) => ({ key: `taste-${id}`, id, name: byId.get(id)!.name, figure: undefined, unit: undefined, free: 'to taste', held: false, at: undefined, untick: () => unOnHand.mutate(id) })),
-    ...checkedTexts.map((i) => ({ key: `text-${i.id}`, id: i.id, name: i.text ?? '', figure: undefined, unit: undefined, free: undefined, held: false, at: undefined, untick: () => uncheck.mutate(i.id) })),
-  ]
   useEffect(() => {
     if (!events || !domainIngredients || !today) return
     resolvedRef.current = resolvedKeys({
@@ -439,7 +311,6 @@ export default function ShopPage() {
       items: (items.data ?? []).map((i) => ({ id: i.id, ingredientId: i.ingredient_id, checked: i.checked, boughtBatchId: i.bought_batch_id })),
     })
   }, [events, domainIngredients, today, items.data])
-  const lastPartner = todaysBatches.find((b) => byPartner(b.id))
   const failure = pantry.error ?? items.error
 
   if (failure) return <Alert color="red">{failure.message}</Alert>
@@ -448,7 +319,9 @@ export default function ShopPage() {
   function submitItem(e: FormEvent) {
     e.preventDefault()
     const value = text.trim()
-    if (value) addItem.mutate(value)
+    if (!value) return
+    const match = (ingredients ?? []).find((i) => i.name.toLowerCase() === value.toLowerCase())
+    addItem.mutate(match ? { ingredient_id: match.id } : { text: value })
   }
 
   function acknowledge(id: string) {
@@ -468,7 +341,7 @@ export default function ShopPage() {
         slots={pantry.household?.slots ?? []}
         today={today}
         horizon={horizon}
-        onSkip={(id, skip) => setSkip.mutate({ id, skip })}
+        onSkip={(id, skip) => setSkip.mutate({ mealId: id, skip })}
         onDone={() => setEditing(false)}
       />
     )
@@ -504,8 +377,8 @@ export default function ShopPage() {
           <div className="sp-band"><span>{category ?? 'Other'}</span><small>{rows.length} to buy</small></div>
           {rows.map((e) => (
             // the row handles the tap itself: label-to-checkbox forwarding was unreliable on touch
-            <div key={e.key} className="sp-row" onClick={() => e.onTick()}>
-              <Tick checked={false} label={`Bought ${e.name}`} onChange={() => e.onTick()} />
+            <div key={e.key} className="sp-row" onClick={() => runTick(e.tick)}>
+              <Tick checked={false} label={`Bought ${e.name}`} onChange={() => runTick(e.tick)} />
               <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}{e.pack && <small className="sp-packline">{e.pack}</small>}</span>
               <Figure figure={e.figure} unit={e.unit} free={e.free} />
               {e.buy ? (
@@ -528,15 +401,15 @@ export default function ShopPage() {
         <div>
           <div className="sp-cart-head">
             <span>In the cart · {cart.length}</span>
-            {checkedTexts.length > 0 && (
-              <Button variant="subtle" loading={clearChecked.isPending} onClick={() => clearChecked.mutate()}>
+            {checkedTextCount > 0 && (
+              <Button variant="subtle" loading={clearChecked.isPending} onClick={() => clearChecked.mutate({ ids: (items.data ?? []).filter((i) => i.checked).map((i) => i.id) })}>
                 Clear checked
               </Button>
             )}
           </div>
           {cart.map((c) => (
             <div key={c.key} className={`sp-row sp-done${c.held ? ' sp-held' : ''}`} style={{ cursor: 'default' }}>
-              <Tick checked label={`Put back ${c.name}`} onChange={() => c.untick()} />
+              <Tick checked label={`Put back ${c.name}`} onChange={() => runUntick(c.untick)} />
               <span className="sp-name">
                 {c.name}
                 {c.held && c.at && <em>ticked by partner · {relativeTime(c.at, now)}</em>}
@@ -561,8 +434,8 @@ export default function ShopPage() {
           <div className="sp-seg-cell"><b>In cart</b><span>{cart.length}</span></div>
           <div className="sp-seg-cell sp-partner">
             <b>Partner</b>
-            {lastPartner ? (
-              <span><span className="sp-pname">{byId.get(lastPartner.ingredientId)?.name}</span> <small>{relativeTime(lastPartner.addedAt, now)}</small></span>
+            {partnerLast ? (
+              <span><span className="sp-pname">{partnerLast.name}</span> <small>{relativeTime(partnerLast.addedAt, now)}</small></span>
             ) : (
               <span>—</span>
             )}
@@ -603,7 +476,7 @@ export default function ShopPage() {
               ))}
             </Stack>
           )}
-          <Button size="lg" loading={snapshot.isPending} onClick={() => snapshot.mutate()}>
+          <Button size="lg" loading={snapshot.isPending} onClick={saveSnapshot}>
             Yes, save a snapshot
           </Button>
           <Button size="lg" variant="default" onClick={() => setSnapshotOpen(false)}>

@@ -1,6 +1,7 @@
 // Production adapter: DataPort over the Supabase client. All `supabase.` calls in the app belong in this file.
+import { mealLinesPayload } from '../../domain/mealLines.ts'
 import { supabase } from '../supabase.ts'
-import { ApiError, type DataPort, type PantryRows } from './port.ts'
+import { ApiError, type DataPort, type PantryRows, type ShoppingItemRow, type UnreadCheckinRow } from './port.ts'
 
 const check = (error: { message: string; code?: string } | null) => {
   if (error) throw new ApiError(error.message, error.code)
@@ -137,9 +138,26 @@ export const supabaseAdapter: DataPort = {
         ingredients: ingredients.data!,
       }
     },
+    async saveEdits(edits) {
+      const { error } = await supabase.rpc('save_pantry_edits', { adjustments: edits.adjustments, new_batches: edits.newBatches, expiries: edits.expiries })
+      check(error)
+    },
   },
 
   shop: {
+    async list() {
+      const { data, error } = await supabase.from('shopping_items').select('*, ingredients(name, unit, category)').order('created_at')
+      check(error)
+      return data as ShoppingItemRow[]
+    },
+    async addItem(item) {
+      const { error } = await supabase.from('shopping_items').insert(item)
+      check(error)
+    },
+    async setMealSkip(mealId, skip) {
+      const { error } = await supabase.from('planned_meals').update({ skip_shopping: skip }).eq('id', mealId)
+      check(error)
+    },
     async buy(b) {
       if (b.shoppingItemId) {
         const { data, error } = await supabase.rpc('buy_shopping_item', {
@@ -169,6 +187,56 @@ export const supabaseAdapter: DataPort = {
       // Deletes the batch (cascading its snapshot rows and adjustments) and puts its list item, if any, back on the list.
       const { error } = await supabase.rpc('unbuy', { batch_id: batchId })
       check(error)
+    },
+  },
+
+  checkins: {
+    async unread() {
+      // RLS hides deleted check-ins, and the embed of a deleted meal comes back null: the caller skips those.
+      const { data, error } = await supabase
+        .from('meal_checkins')
+        .select('id, planned_meal_id, created_at, planned_meals(id, date, slot, portions, cook_id, recipes(name))')
+        .is('answered_at', null)
+        .order('created_at')
+      check(error)
+      return data as UnreadCheckinRow[]
+    },
+    async answer(mealId, answer) {
+      const { data, error } = await supabase.rpc('answer_checkin', { p_meal: mealId, p_answer: answer })
+      check(error)
+      return data as boolean
+    },
+    async setNotCooked(mealId, notCooked) {
+      const { error } = await supabase.from('planned_meals').update({ not_cooked: notCooked }).eq('id', mealId)
+      check(error)
+    },
+    async saveMealLines(mealId, lines) {
+      const { error } = await supabase.rpc('save_meal_lines', { p_meal: mealId, p_lines: mealLinesPayload(lines) })
+      check(error)
+    },
+    async slotEndTimes() {
+      const { data, error } = await supabase.from('households').select('slots, slot_end_times').single()
+      check(error)
+      return data!
+    },
+    async saveSlotEndTimes(times) {
+      const { error } = await supabase.from('households').update({ slot_end_times: times }).not('id', 'is', null)
+      check(error)
+    },
+    async finishShopping(onDate, batches, answers) {
+      const { error } = await supabase.rpc('finish_shopping', { on_date: onDate, batches, answers })
+      check(error)
+    },
+  },
+
+  live: {
+    subscribeHouseholdEvents(topic, onEvent) {
+      const channel = supabase.channel(topic)
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'household_events' }, (p) => {
+        onEvent((p.new as { by?: string | null }).by ?? null)
+      })
+      channel.subscribe()
+      return () => { void supabase.removeChannel(channel) }
     },
   },
 

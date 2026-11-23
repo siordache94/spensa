@@ -109,7 +109,7 @@ const mealOrder = (slotOrder: string[] | undefined): ((a: Meal, b: Meal) => numb
   return (a, b) => rank(a) - rank(b) || (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id)
 }
 
-const byExpiry = (a: Batch, b: Batch) =>
+export const byExpiry = (a: Batch, b: Batch) =>
   (a.expiresOn ?? '9999').localeCompare(b.expiresOn ?? '9999') || Date.parse(a.addedAt) - Date.parse(b.addedAt)
 
 /** Replays every event up to and including `upTo`. */

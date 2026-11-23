@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { ActionIcon, Alert, Button, Center, Group, Loader, Menu, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { IconPencil, IconPlus, IconX } from '@tabler/icons-react'
-import { invalidatePantry, usePantry } from '../lib/pantry.ts'
-import { supabase } from '../lib/supabase.ts'
+import { useSavePantryEdits, usePantryState } from '../lib/api/pantry.ts'
+import { round3 } from '../lib/format.ts'
+import { setPantryOnHand } from '../lib/api/shop.ts'
+import { useCommand } from '../lib/api/command.ts'
 import type { Tables } from '../lib/database.types.ts'
-import { addDays, replay, stockByIngredient, type Day } from '../domain/replay.ts'
+import { addDays, byExpiry, type Day } from '../domain/replay.ts'
 import { diffEdits, type EditLine } from '../domain/pantryEdits.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
@@ -21,7 +22,6 @@ type Line = EditLine
 type Draft = { lines: Line[]; shown: string[]; origin: Line[] }
 
 const EPS = 1e-9
-const round3 = (n: number) => Number(n.toFixed(3))
 const total = (lines: Line[]) => round3(lines.reduce((s, l) => s + (l.qty && l.qty > 0 ? l.qty : 0), 0))
 const valid = (l: Line) => l.qty !== null && Number.isFinite(l.qty) && l.qty >= 0
 let nextKey = 0
@@ -36,8 +36,7 @@ function hint(expiry: Day, today: Day, expiringDays: number) {
 }
 
 export default function PantryPage() {
-  const queryClient = useQueryClient()
-  const { events, ingredients, household, today: day, isPending, error } = usePantry()
+  const { events, ingredients, household, today: day, isPending, error, remaining, stockByIngredient: stock } = usePantryState()
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(false)
   // null = untouched: show the server state. Once edited, the draft wins and refetches are ignored.
@@ -45,9 +44,7 @@ export default function PantryPage() {
 
   // Stock is replayed, never stored (src/domain/replay.ts).
   const base = useMemo<Omit<Draft, 'origin'> | null>(() => {
-    if (!events || !day) return null
-    const { remaining } = replay(events, day)
-    const stock = stockByIngredient(events, remaining)
+    if (!events || !day || !remaining || !stock) return null
     const lines: Line[] = []
     const shown: string[] = []
     for (const i of [...(ingredients ?? [])].sort((a, b) => a.name.localeCompare(b.name))) {
@@ -55,11 +52,11 @@ export default function PantryPage() {
       shown.push(i.id)
       events.batches
         .filter((b) => b.ingredientId === i.id && (remaining.get(b.id) ?? 0) > EPS)
-        .sort((a, b) => (a.expiresOn ?? '9999').localeCompare(b.expiresOn ?? '9999') || Date.parse(a.addedAt) - Date.parse(b.addedAt))
+        .sort(byExpiry)
         .forEach((b) => lines.push({ key: b.id, batchId: b.id, ingredientId: i.id, qty: round3(remaining.get(b.id) ?? 0), expiry: b.expiresOn }))
     }
     return { lines, shown }
-  }, [events, ingredients, day])
+  }, [events, ingredients, day, remaining, stock])
 
   const view: Draft | null = draft ?? (base && { ...base, origin: base.lines })
   const dirty = draft !== null
@@ -74,19 +71,8 @@ export default function PantryPage() {
   const remove = (l: Line, reason: 'finished' | 'discard') =>
     l.batchId === null ? edit((d) => ({ ...d, lines: d.lines.filter((x) => x.key !== l.key) })) : patch(l.key, { removed: reason })
 
-  const save = useMutation({
-    mutationFn: async () => {
-      // Only what changed is written (adjustments, new batches, expiry fixes), never a snapshot.
-      const { adjustments, newBatches, expiries } = diffEdits(view!.origin, view!.lines)
-      const { error } = await supabase.rpc('save_pantry_edits', { adjustments, new_batches: newBatches, expiries })
-      if (error) throw new Error(error.message)
-    },
-    onSuccess: async () => {
-      await invalidatePantry(queryClient)
-      setDraft(null)
-      setEditing(false)
-    },
-  })
+  // Only what changed is written (adjustments, new batches, expiry fixes), never a snapshot.
+  const save = useSavePantryEdits({ onSuccess: () => { setDraft(null); setEditing(false) } })
 
   useEffect(() => {
     if (!dirty) return
@@ -263,7 +249,7 @@ export default function PantryPage() {
 
       {editing && (
         <div className="sp-savebar" role="region" aria-label="Edit pantry">
-          <Button onClick={() => save.mutate()} disabled={!dirty || !view.lines.every(valid)} loading={save.isPending}>Save changes</Button>
+          <Button onClick={() => save.mutate(diffEdits(view.origin, view.lines))} disabled={!dirty || !view.lines.every(valid)} loading={save.isPending}>Save changes</Button>
           <Button variant="default" onClick={() => { setDraft(null); setEditing(false); save.reset() }} disabled={save.isPending}>{dirty ? 'Discard' : 'Cancel'}</Button>
         </div>
       )}
@@ -272,21 +258,13 @@ export default function PantryPage() {
 }
 
 function OnHandRow({ ingredient }: { ingredient: Ingredient }) {
-  const queryClient = useQueryClient()
-  const toggle = useMutation({
-    mutationFn: async (onHand: boolean) => {
-      const { error } = await supabase.from('ingredients').update({ on_hand: onHand }).eq('id', ingredient.id)
-      if (error) throw new Error(error.message)
-    },
-    onError: (e) => notifications.show({ color: 'red', message: e.message }),
-    onSettled: () => invalidatePantry(queryClient),
-  })
-  const onHand = toggle.isPending ? !!toggle.variables : ingredient.on_hand
+  const toggle = useCommand(setPantryOnHand, { onError: (e) => notifications.show({ color: 'red', message: e.message }) })
+  const onHand = toggle.isPending ? !!toggle.variables?.onHand : ingredient.on_hand
 
   return (
     <Group justify="space-between" wrap="nowrap" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
       <Text fw={500} truncate="end" miw={0}>{ingredient.name}</Text>
-      <Switch checked={onHand} label={onHand ? 'On hand' : 'Out'} onChange={(e) => toggle.mutate(e.currentTarget.checked)} />
+      <Switch checked={onHand} label={onHand ? 'On hand' : 'Out'} onChange={(e) => toggle.mutate({ id: ingredient.id, onHand: e.currentTarget.checked })} />
     </Group>
   )
 }

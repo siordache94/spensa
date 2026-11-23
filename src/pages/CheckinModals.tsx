@@ -3,15 +3,12 @@ import { ActionIcon, Button, Group, Modal, Select, Stack, Text } from '@mantine/
 import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconX } from '@tabler/icons-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
-import {
-  answerCheckin, clearMealLines, invalidateCheckins, mealOwnLines, saveMealLines, setMealNotCooked, slotLabel, useAnswerCheckin,
-  type CheckinAnswer,
-} from '../lib/checkins.ts'
-import { invalidatePantry } from '../lib/pantry.ts'
+import { mealOwnLines, slotLabel, type CheckinAnswer } from '../lib/checkins.ts'
+import { answerCheckin, saveMealLines, setNotCooked } from '../lib/api/checkins.ts'
+import { useCommand } from '../lib/api/command.ts'
 import { seedMealLines } from '../domain/mealLines.ts'
 import { recipeLines } from '../domain/checkinAnswers.ts'
 import type { MealAmount } from '../domain/replay.ts'
@@ -32,13 +29,7 @@ export const checkinFailure = (e: Error) => notifications.show({ color: 'red', t
 
 /** The answer and "didn't cook" writes for a meal, refreshing the unread list and the plan after each. */
 export function useCheckinActions() {
-  const qc = useQueryClient()
-  const answer = useAnswerCheckin()
-  const notCooked = useMutation({
-    mutationFn: (v: { mealId: string; value: boolean }) => setMealNotCooked(v.mealId, v.value),
-    onSettled: () => Promise.all([invalidatePantry(qc), invalidateCheckins(qc)]),
-  })
-  return { answer, notCooked }
+  return { answer: useCommand(answerCheckin), notCooked: useCommand(setNotCooked) }
 }
 
 /** "Cooked as planned?" for one meal. Tapping a button answers the check-in (or flags the meal) and closes the sheet. */
@@ -83,7 +74,8 @@ export function AmountsModal({ meal, unread, ingredients, onClose }: {
   ingredients: IngredientOption[]
   onClose: () => void
 }) {
-  const qc = useQueryClient()
+  const saveLines = useCommand(saveMealLines)
+  const answer = useCommand(answerCheckin)
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
   const own = mealOwnLines(meal)
   const [lines, setLines] = useState<MealAmount[]>(() => own ?? seedMealLines(recipeLines(meal.recipes?.recipe_ingredients ?? []), meal.portions))
@@ -103,12 +95,11 @@ export function AmountsModal({ meal, unread, ingredients, onClose }: {
     setLines((ls) => [...ls, { ingredientId: id, qty: unit === 'to_taste' ? null : unit === 'count' ? 1 : 100 }])
   }
 
-  async function finish(write: () => Promise<void>) {
+  async function finish(lines: MealAmount[]) {
     setBusy(true)
     try {
-      await write()
-      if (unread) await answerCheckin(meal.id, 'changed')
-      await Promise.all([invalidatePantry(qc), invalidateCheckins(qc)])
+      await saveLines.mutateAsync({ mealId: meal.id, lines })
+      if (unread) await answer.mutateAsync({ mealId: meal.id, answer: 'changed' })
       onClose()
     } catch (e) {
       checkinFailure(e as Error)
@@ -166,9 +157,9 @@ export function AmountsModal({ meal, unread, ingredients, onClose }: {
         />
 
         {lines.length === 0 && <Text size="sm" c="red">Keep at least one ingredient, or reset to the recipe.</Text>}
-        <Button disabled={!valid} loading={busy} onClick={() => finish(() => saveMealLines(meal.id, lines))}>Save amounts</Button>
+        <Button disabled={!valid} loading={busy} onClick={() => finish(lines)}>Save amounts</Button>
         {own && (
-          <Button variant="default" disabled={busy} onClick={() => finish(() => clearMealLines(meal.id))}>Reset to recipe</Button>
+          <Button variant="default" disabled={busy} onClick={() => finish([])}>Reset to recipe</Button>
         )}
       </Stack>
     </GuardedModal>
