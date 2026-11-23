@@ -1,25 +1,9 @@
 import { addDays, type Day } from '../domain/replay.ts'
 
-/** A shopping trip: which planned meals it covers and the day it started. Kept per device. */
-export type Trip = { mealIds: string[]; startedOn: Day }
+// A shopping trip is inferred, never stored (CONTEXT.md): today through the household horizon, minus the
+// planned meals flagged `skip_shopping`. Only the partner-highlight acks below are per device.
 
-const TRIP_KEY = 'spensa.shop.trip'
 const ACK_KEY = 'spensa.shop.acked'
-
-export function loadTrip(): Trip | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(TRIP_KEY) ?? 'null') as Trip | null
-    if (raw && Array.isArray(raw.mealIds) && raw.mealIds.every((x) => typeof x === 'string') && typeof raw.startedOn === 'string') return raw
-  } catch { /* unreadable: no trip */ }
-  return null
-}
-
-export function saveTrip(trip: Trip | null) {
-  try {
-    if (trip) localStorage.setItem(TRIP_KEY, JSON.stringify(trip))
-    else localStorage.removeItem(TRIP_KEY)
-  } catch { /* private mode: the trip lasts until reload */ }
-}
 
 export function loadAcked(): string[] {
   try {
@@ -34,14 +18,34 @@ export function saveAcked(ids: string[]) {
   try { localStorage.setItem(ACK_KEY, JSON.stringify(ids.slice(-200))) } catch { /* session only */ }
 }
 
-/** The date range a trip shops for: from the day it started to its last selected meal (or just that day with no meals). */
-export function tripRange(startedOn: Day, mealDates: Day[]): { from: Day; to: Day } {
-  const last = mealDates.reduce((a, d) => (d > a ? d : a), startedOn)
-  return { from: startedOn, to: last }
+/** The days a trip shops for: today through `horizonDays` days (1 = today only). */
+export function tripRange(today: Day, horizonDays: number): { from: Day; to: Day } {
+  return { from: today, to: addDays(today, horizonDays - 1) }
 }
 
-/** Days shown in trip setup: today through the horizon, plus 7 more per "show more". */
-export const setupEnd = (today: Day, horizonDays: number, extraWeeks: number): Day => addDays(today, horizonDays - 1 + 7 * extraWeeks)
+/** The meals in the trip's range that are not skipped. Skipped meals are still eaten (stock replay), just not shopped for. */
+export function selectedMealIds(meals: { id: string; date: Day; skip_shopping: boolean }[], from: Day, to: Day): Set<string> {
+  return new Set(meals.filter((m) => m.date >= from && m.date <= to && !m.skip_shopping).map((m) => m.id))
+}
+
+/**
+ * What changed on the still-to-buy list between two renders, by entry key. Keys in `resolved` that vanished were
+ * bought (they moved to the cart), not dropped from the list, so they are not counted as removed.
+ */
+export function diffToBuy(prev: Iterable<string>, next: Iterable<string>, resolved: ReadonlySet<string> = new Set()) {
+  const before = new Set(prev)
+  const after = new Set(next)
+  return {
+    added: [...after].filter((k) => !before.has(k)),
+    removed: [...before].filter((k) => !after.has(k) && !resolved.has(k)),
+  }
+}
+
+/** "Anna changed the list: 2 added, 1 removed", or null when nothing changed. */
+export function changeMessage(who: string, diff: { added: unknown[]; removed: unknown[] }): string | null {
+  const parts = [diff.added.length && `${diff.added.length} added`, diff.removed.length && `${diff.removed.length} removed`].filter(Boolean)
+  return parts.length ? `${who} changed the list: ${parts.join(', ')}` : null
+}
 
 /** "just now", "4 min", "2 h". */
 export function relativeTime(iso: string, now: number): string {

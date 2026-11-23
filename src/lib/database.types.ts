@@ -81,6 +81,26 @@ isOneToOne: false
       referencedColumns: ["household_id","id"]
     }
                   ]
+                },"household_events": {
+                  Row: {
+                    "at": string,"by": string | null,"household_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "at"?: string,"by"?: string | null,"household_id": string
+                  }
+                  Update: {
+                    "at"?: string,"by"?: string | null,"household_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "household_events_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: true
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"household_members": {
                   Row: {
                     "display_name": string | null,"household_id": string,"user_id": string
@@ -103,14 +123,14 @@ isOneToOne: false
                   ]
                 },"households": {
                   Row: {
-                    "created_at": string,"expiring_days": number,"id": string,"invite_code": string,"name": string,"slots": (string)[],"timezone": string
+                    "created_at": string,"expiring_days": number,"horizon_days": number,"id": string,"invite_code": string,"name": string,"slots": (string)[],"timezone": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"expiring_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slots"?: (string)[],"timezone"?: string
                   }
                   Update: {
-                    "created_at"?: string,"expiring_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slots"?: (string)[],"timezone"?: string
                   }
                   Relationships: [
                     
@@ -137,14 +157,14 @@ isOneToOne: false
                   ]
                 },"planned_meals": {
                   Row: {
-                    "cook_id": string | null,"created_at": string,"created_by": string | null,"date": string,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"slot": string,"updated_at": string | null,"updated_by": string | null
+                    "cook_id": string | null,"created_at": string,"created_by": string | null,"date": string,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"skip_shopping": boolean,"slot": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date": string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"slot": string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date": string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot": string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"slot"?: string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {

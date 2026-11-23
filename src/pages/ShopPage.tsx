@@ -15,8 +15,8 @@ import { softDelete } from '../lib/softDelete.ts'
 import { toBuy } from '../lib/shopList.ts'
 import { BUY_KEY, CHECK_KEY, ON_HAND_KEY, UNBUY_KEY, UNCHECK_KEY, UN_ON_HAND_KEY, type Buy as BuyVars } from '../lib/shopMutations.ts'
 import { useWaitingShopMutations } from '../lib/offlineQueue.ts'
-import { useSettings } from '../lib/settings.ts'
-import { loadAcked, loadTrip, relativeTime, saveAcked, saveTrip, setupEnd, tripRange, type Trip } from '../lib/trip.ts'
+import { memberLabel, useMembers } from '../lib/members.ts'
+import { changeMessage, diffToBuy, loadAcked, relativeTime, saveAcked, selectedMealIds, tripRange } from '../lib/trip.ts'
 import { addDays, replay, shoppingList, type Day, type Need } from '../domain/replay.ts'
 import './shop.css'
 
@@ -38,7 +38,7 @@ type Entry = {
   onTick: () => void
 }
 
-type Meal = { id: string; date: Day; slot: string; portions: number; position: number; recipes: { name: string } | null }
+type Meal = { id: string; date: Day; slot: string; portions: number; position: number; skip_shopping: boolean; recipes: { name: string } | null }
 
 const withIds = (b: Buy): BuyVars => ({ ...b, batchId: uuid(), addedAt: new Date().toISOString() })
 const STORE_WALK = ['produce', 'dairy', 'meat', 'fish', 'dry goods', 'frozen']
@@ -108,50 +108,40 @@ function Figure({ figure, unit, free }: { figure?: string; unit?: string; free?:
   )
 }
 
-function Setup({ meals, slots, today, horizon, trip, onStart }: {
+/** Meal selection for the trip. Each tick writes `skip_shopping` straight away, so both phones see the same trip. */
+function Setup({ meals, slots, today, horizon, onSkip, onDone }: {
   meals: Meal[]
   slots: string[]
   today: Day
   horizon: number
-  trip: Trip | null
-  onStart: (mealIds: string[]) => void
+  onSkip: (id: string, skip: boolean) => void
+  onDone: () => void
 }) {
-  const [selected, setSelected] = useState<Set<string>>(() => {
-    if (trip) return new Set(trip.mealIds)
-    const end = setupEnd(today, horizon, 0)
-    return new Set(meals.filter((m) => m.date >= today && m.date <= end).map((m) => m.id))
-  })
-  const [extra, setExtra] = useState(() => {
-    if (!trip) return 0
-    const last = meals.filter((m) => selected.has(m.id)).reduce((a, m) => (m.date > a ? m.date : a), today)
-    let w = 0
-    while (setupEnd(today, horizon, w) < last) w++
-    return w
-  })
-  const end = setupEnd(today, horizon, extra)
+  const { from, to } = tripRange(today, horizon)
   const rank = (slot: string) => { const i = slots.indexOf(slot); return i < 0 ? slots.length : i }
   const shown = meals
-    .filter((m) => m.date >= today && m.date <= end)
+    .filter((m) => m.date >= from && m.date <= to)
     .sort((a, b) => a.date.localeCompare(b.date) || rank(a.slot) - rank(b.slot) || a.position - b.position)
   const days = [...new Set(shown.map((m) => m.date))]
-  const count = shown.filter((m) => selected.has(m.id)).length
-  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const count = shown.filter((m) => !m.skip_shopping).length
+  const span = `${horizon} ${horizon === 1 ? 'day' : 'days'}`
 
   return (
     <div className="sp-shop">
       <div className="sp-titlerow"><h1 className="sp-title">Plan this trip</h1></div>
-      <p className="sp-note">Staples below minimum stock and extras are always on the list.</p>
+      <p className="sp-note">
+        The next {span} (change it in Settings). Untick a meal to leave it off the list; it is still planned and eaten.
+        Staples below minimum stock and extras are always on the list.
+      </p>
 
-      {shown.length === 0 && (
-        <p className="sp-empty">Nothing is planned for the next {extra * 7 + horizon} days. You can still shop for staples and extras.</p>
-      )}
+      {shown.length === 0 && <p className="sp-empty">Nothing is planned for the next {span}. You can still shop for staples and extras.</p>}
 
       {days.map((d) => (
         <div key={d}>
           <div className="sp-band sp-day"><span>{dayjs(d).format('ddd D MMM')}</span></div>
           {shown.filter((m) => m.date === d).map((m) => (
             <label key={m.id} className="sp-meal">
-              <Tick checked={selected.has(m.id)} label={`${m.slot} ${m.recipes?.name ?? 'meal'}`} onChange={() => toggle(m.id)} />
+              <Tick checked={!m.skip_shopping} label={`${m.slot} ${m.recipes?.name ?? 'meal'}`} onChange={() => onSkip(m.id, !m.skip_shopping)} />
               <span className="sp-slot">{m.slot}</span>
               <span className="sp-name">{m.recipes?.name ?? 'No recipe'} <b>× {m.portions}</b></span>
             </label>
@@ -159,15 +149,9 @@ function Setup({ meals, slots, today, horizon, trip, onStart }: {
         </div>
       ))}
 
-      {meals.some((m) => m.date > end) && (
-        <div className="sp-more">
-          <Button variant="default" size="md" fullWidth onClick={() => setExtra((e) => e + 1)}>Show 7 more days</Button>
-        </div>
-      )}
-
       <div className="sp-dock">
-        <Button className="sp-dock-btn" size="lg" fullWidth onClick={() => onStart([...selected].filter((id) => meals.some((m) => m.id === id)))}>
-          {trip ? 'Update trip' : 'Start shopping'} · {count} {count === 1 ? 'meal' : 'meals'}
+        <Button className="sp-dock-btn" size="lg" fullWidth onClick={onDone}>
+          Done · {count} {count === 1 ? 'meal' : 'meals'}
         </Button>
       </div>
     </div>
@@ -178,7 +162,7 @@ export default function ShopPage() {
   const queryClient = useQueryClient()
   const pantry = usePantry()
   const { events, domainIngredients, ingredients, today } = pantry
-  const [settings] = useSettings()
+  const members = useMembers()
   const waiting = useWaitingShopMutations()
 
   const items = useQuery({
@@ -193,22 +177,47 @@ export default function ShopPage() {
     },
   })
 
-  // Live sync: any change from the other phone refreshes the list.
+  // Live sync. Soft deletes are UPDATEs of rows RLS then hides, so row events never reach the other phone
+  // (ADR 0003). Every write also touches the household's `household_events` row; any change to it refetches.
+  // `by` tells the partner's writes from our own echoes, and partner changes to the to-buy list raise one toast.
+  const meRef = useRef<string | null>(null)
+  const keysRef = useRef<string[]>([])
+  const resolvedRef = useRef<ReadonlySet<string>>(new Set())
+  const whoRef = useRef<(id: string | null) => string>(() => 'Your partner')
   useEffect(() => {
-    const channel = supabase.channel('shopping')
-    for (const table of ['batches', 'ingredients', 'shopping_items']) {
-      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-        invalidatePantry(queryClient)
-        queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
-      })
+    whoRef.current = (id) => {
+      const m = members.data?.find((x) => x.user_id === id)
+      return m?.display_name ? memberLabel(m) : 'Your partner'
     }
+  }, [members.data])
+  useEffect(() => {
+    let baseline: string[] | null = null
+    let who: string | null = null
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const flush = () => {
+      const msg = baseline && changeMessage(whoRef.current(who), diffToBuy(baseline, keysRef.current, resolvedRef.current))
+      baseline = null
+      if (msg) notifications.show({ id: 'partner-list', message: msg })
+    }
+    const channel = supabase.channel('household-events')
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'household_events' }, (p) => {
+      invalidatePantry(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['shopping_items'] })
+      queryClient.invalidateQueries({ queryKey: ['household', 'settings'] })
+      const by = (p.new as { by?: string | null }).by ?? null
+      if (!by || by === meRef.current) return
+      baseline ??= keysRef.current // taken before the refetch lands
+      who = by
+      clearTimeout(timer)
+      timer = setTimeout(flush, 3000) // combine changes that arrive close together
+    })
     channel.subscribe()
     return () => {
+      clearTimeout(timer)
       void supabase.removeChannel(channel)
     }
   }, [queryClient])
 
-  const [trip, setTrip] = useState<Trip | null>(loadTrip)
   const [editing, setEditing] = useState(false)
   const [acked, setAcked] = useState<string[]>(loadAcked)
   const [me, setMe] = useState<string | null>(null)
@@ -219,19 +228,22 @@ export default function ShopPage() {
   const [snapshotOpen, setSnapshotOpen] = useState(false)
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => setMe(data.session?.user.id ?? null))
+    void supabase.auth.getSession().then(({ data }) => { meRef.current = data.session?.user.id ?? null; setMe(meRef.current) })
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
 
-  const updateTrip = (t: Trip | null) => { setTrip(t); saveTrip(t) }
-
-  const mealIds = useMemo(() => new Set(trip?.mealIds ?? []), [trip])
-  const range = useMemo(() => {
-    if (!trip || !events) return null
-    const dates = events.meals.filter((m) => mealIds.has(m.id)).map((m) => m.date)
-    return { ...tripRange(trip.startedOn, dates), meals: dates.length, first: dates.reduce((a, d) => (d < a ? d : a), dates[0] ?? '') }
-  }, [trip, events, mealIds])
+  // The trip is inferred from household data, so both phones see the same list.
+  const horizon = pantry.household?.horizon_days ?? 7
+  const range = useMemo(() => (today ? tripRange(today, horizon) : null), [today, horizon])
+  const mealIds = useMemo(
+    () => (range ? selectedMealIds((pantry.meals ?? []) as Meal[], range.from, range.to) : new Set<string>()),
+    [pantry.meals, range],
+  )
+  const tripMeals = useMemo(
+    () => ((pantry.meals ?? []) as Meal[]).filter((m) => mealIds.has(m.id)).map((m) => m.date).sort(),
+    [pantry.meals, mealIds],
+  )
 
   const needs = useMemo<Need[]>(
     () => (events && domainIngredients && range ? shoppingList(events, domainIngredients, range.from, range.to, mealIds) : []),
@@ -279,6 +291,19 @@ export default function ShopPage() {
     onError: showError,
   })
 
+  const setSkip = useMutation({
+    mutationFn: async ({ id, skip }: { id: string; skip: boolean }) => {
+      const { error } = await supabase.from('planned_meals').update({ skip_shopping: skip }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    onMutate: ({ id, skip }) => {
+      // tick instantly; the refetch confirms it
+      queryClient.setQueryData<{ meals: Meal[] }>(['pantry'], (d) => d && { ...d, meals: d.meals.map((m) => (m.id === id ? { ...m, skip_shopping: skip } : m)) })
+    },
+    onSettled: () => invalidatePantry(queryClient),
+    onError: showError,
+  })
+
   const snapshot = useMutation({
     mutationFn: async () => {
       if (!events || !today) throw new Error('Still loading, try again.')
@@ -289,7 +314,7 @@ export default function ShopPage() {
       const { error } = await supabase.rpc('finish_shopping', { on_date: today, batches })
       if (error) throw new Error(error.message)
     },
-    onSuccess: () => { setSnapshotOpen(false); setEditing(false); updateTrip(null) },
+    onSuccess: () => { setSnapshotOpen(false); setEditing(false) },
     onSettled: () => invalidatePantry(queryClient),
     onError: showError,
   })
@@ -374,6 +399,9 @@ export default function ShopPage() {
     return [...named, ...(other ? [[null, other] as [null, Entry[]]] : [])] as [string | null, Entry[]][]
   }, [entries])
 
+  // Feeds the partner-change toast: keys now on the list, and keys that left it because they were bought.
+  useEffect(() => { keysRef.current = entries.map((e) => e.key) }, [entries])
+
   const checkedTexts = (items.data ?? []).filter((i) => !i.ingredient_id && i.checked)
   const byId = new Map((ingredients ?? []).map((i) => [i.id, i]))
   const authors = pantry.batchAuthors ?? {}
@@ -395,6 +423,13 @@ export default function ShopPage() {
       .map((id) => ({ key: `taste-${id}`, id, name: byId.get(id)!.name, figure: undefined, unit: undefined, free: 'to taste', held: false, at: undefined, untick: () => unOnHand.mutate(id) })),
     ...checkedTexts.map((i) => ({ key: `text-${i.id}`, id: i.id, name: i.text ?? '', figure: undefined, unit: undefined, free: undefined, held: false, at: undefined, untick: () => uncheck.mutate(i.id) })),
   ]
+  useEffect(() => {
+    resolvedRef.current = new Set([
+      ...(events?.batches ?? []).filter((b) => b.addedOn === today).map((b) => `need-${b.ingredientId}`),
+      ...(ingredients ?? []).filter((i) => i.on_hand).map((i) => `need-${i.id}`),
+      ...(items.data ?? []).filter((i) => i.checked || i.bought_batch_id).map((i) => `item-${i.id}`),
+    ])
+  }, [events, today, ingredients, items.data])
   const lastPartner = todaysBatches.find((b) => byPartner(b.id))
   const failure = pantry.error ?? items.error
 
@@ -417,22 +452,22 @@ export default function ShopPage() {
     })
   }
 
-  if (!trip || editing || !range) {
+  if (editing || !range) {
     return (
       <Setup
         meals={(pantry.meals ?? []) as Meal[]}
         slots={pantry.household?.slots ?? []}
         today={today}
-        horizon={settings.horizonDays}
-        trip={trip}
-        onStart={(ids) => { updateTrip({ mealIds: ids, startedOn: trip?.startedOn ?? today }); setEditing(false) }}
+        horizon={horizon}
+        onSkip={(id, skip) => setSkip.mutate({ id, skip })}
+        onDone={() => setEditing(false)}
       />
     )
   }
 
-  const summary = range.meals === 0
+  const summary = tripMeals.length === 0
     ? 'Staples and extras only'
-    : `${range.first === range.to ? dayjs(range.to).format('ddd D') : `${dayName(range.first)} – ${dayName(range.to)}`} · ${range.meals} ${range.meals === 1 ? 'meal' : 'meals'}`
+    : `${tripMeals[0] === tripMeals.at(-1) ? dayjs(tripMeals[0]).format('ddd D') : `${dayName(tripMeals[0])} – ${dayName(tripMeals.at(-1)!)}`} · ${tripMeals.length} ${tripMeals.length === 1 ? 'meal' : 'meals'}`
 
   return (
     <div className="sp-shop">

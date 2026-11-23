@@ -26,6 +26,10 @@ Batches and adjustments are ordered by when the server recorded them (`recorded_
 
 Equality counts as covered. `finish_shopping` writes the snapshot in one transaction with the batches it covers, so they share `now()` and the snapshot already lists them. Days are derived from `recorded_at` in the household timezone (`addedOn`, adjustment `on`), never from the phone's clock.
 
+### Shopping trip
+
+The shopping list is the replay's shortfalls over the trip's range (today through the household horizon), restricted to meals not flagged `skip_shopping`. The flag never changes the replay: a skipped meal is still planned and eaten, so it still consumes stock. It only drops that meal's needs from the list.
+
 ## Consequences
 
 - Editing any day after the latest snapshot just changes the replay result. No cron, no write races.

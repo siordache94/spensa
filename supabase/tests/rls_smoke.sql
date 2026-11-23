@@ -197,6 +197,34 @@ do $$ begin
   end;
   update public.households set expiring_days = 5;
   assert (select expiring_days from public.households) = 5, 'settings update failed';
+
+  -- horizon_days: members may change it, within 1..14
+  update public.households set horizon_days = 10;
+  assert (select horizon_days from public.households) = 10, 'horizon_days update failed';
+  begin
+    update public.households set horizon_days = 15;
+    assert false, 'horizon_days 15 should be rejected';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.households set horizon_days = 0;
+    assert false, 'horizon_days 0 should be rejected';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- skip_shopping: members update it on planned meals (default false)
+do $$ begin
+  assert (select not skip_shopping from public.planned_meals limit 1), 'skip_shopping should default to false';
+  update public.planned_meals set skip_shopping = true;
+  assert (select bool_and(skip_shopping) from public.planned_meals), 'skip_shopping update failed';
+  -- the signal row exists for this household only, and clients cannot write to it
+  assert (select count(*) from public.household_events) = 1, 'household_events should show exactly my household';
+  begin
+    update public.household_events set by = null;
+    assert false, 'household_events should not be client-writable';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 -- rotate_invite_code returns a new code, the old one stops working, and the new one joins

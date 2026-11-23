@@ -2,14 +2,14 @@ import { useSyncExternalStore } from 'react'
 
 export type ThemeName = 'light' | 'dark' | 'amoled'
 export type Density = 'compact' | 'airy'
-export type Settings = { theme: ThemeName; density: Density; horizonDays: number }
+export type Settings = { theme: ThemeName; density: Density }
 
 const KEY = 'spensa.settings'
 const themes: ThemeName[] = ['light', 'dark', 'amoled']
 const densities: Density[] = ['compact', 'airy']
 const META_COLOR: Record<ThemeName, string> = { light: '#E6E8EB', dark: '#0B0D10', amoled: '#000000' }
 
-type Stored = { theme?: ThemeName; density?: Density; horizonDays?: number }
+type Stored = { theme?: ThemeName; density?: Density }
 
 function read(): Stored {
   try {
@@ -17,7 +17,6 @@ function read(): Stored {
     const out: Stored = {}
     if (themes.includes(raw.theme as ThemeName)) out.theme = raw.theme
     if (densities.includes(raw.density as Density)) out.density = raw.density
-    if (Number.isInteger(raw.horizonDays) && raw.horizonDays! >= 1 && raw.horizonDays! <= 14) out.horizonDays = raw.horizonDays
     return out
   } catch {
     return {}
@@ -38,7 +37,6 @@ function compute(): Settings {
     // No saved theme: follow the system (light or dark; amoled is always a choice).
     theme: stored.theme ?? (media?.matches ? 'light' : 'dark'),
     density: stored.density ?? 'compact',
-    horizonDays: stored.horizonDays ?? 7,
   }
 }
 

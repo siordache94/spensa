@@ -13,7 +13,7 @@ export const today = (timeZone: string): Day => localDay(new Date(), timeZone)
 const num = (v: number | string | null) => (v === null ? null : Number(v))
 
 async function fetchSettings() {
-  const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, slots').single()
+  const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots').single()
   if (error) throw error
   return data
 }

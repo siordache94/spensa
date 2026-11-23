@@ -71,10 +71,15 @@ do $$ begin
   perform public.buy_shopping_item('20000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000003',
     '10000000-0000-0000-0000-000000000001', 300, null, now());
   insert into public.shopping_items (id, ingredient_id) values ('20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002');
+  insert into public.planned_meals (id, date, slot, portions, skip_shopping) values ('40000000-0000-0000-0000-000000000001', '2026-11-25', 'dinner', 2, true);
+  assert (select skip_shopping from public.planned_meals where id = '40000000-0000-0000-0000-000000000001'), 'skip_shopping not stored';
   perform public.finish_shopping('2026-11-23', '[{"batch_id":"30000000-0000-0000-0000-000000000003","qty":300}]'::jsonb);
   assert not exists (select 1 from public.shopping_items where id = '20000000-0000-0000-0000-000000000001'), 'bought item not removed';
   assert exists (select 1 from public.shopping_items where id = '20000000-0000-0000-0000-000000000003'), 'unbought item removed';
   assert (select count(*) from public.snapshots) = 1, 'snapshot not saved';
+  assert not (select skip_shopping from public.planned_meals where id = '40000000-0000-0000-0000-000000000001'), 'finish_shopping should start a new trip (skip_shopping reset)';
+  -- the realtime signal row is written by the caller's writes and visible to them
+  assert (select by from public.household_events) = '00000000-0000-0000-0000-00000000000a', 'household_events not touched by the writer';
 end $$;
 reset role;
 do $$ begin
