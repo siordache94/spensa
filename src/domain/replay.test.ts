@@ -172,4 +172,45 @@ describe('shoppingList', () => {
       { ingredientId: 'salt', qty: null, packs: null },
     ])
   })
+
+  it('with mealIds, counts only the selected meals in range', () => {
+    const e = ev({
+      meals: [meal('m1', '2026-11-24', 2, pasta80), meal('m2', '2026-11-25', 2, pasta80)],
+    })
+    expect(shoppingList(e, [ingredients[0]], '2026-11-23', '2026-11-29')).toEqual([{ ingredientId: 'pasta', qty: 320, packs: 1 }])
+    expect(shoppingList(e, [ingredients[0]], '2026-11-23', '2026-11-29', new Set(['m2']))).toEqual([
+      { ingredientId: 'pasta', qty: 160, packs: 1 },
+    ])
+  })
+
+  it('an unselected earlier meal still eats the stock, so the selected later meal is fully short', () => {
+    const e = ev({
+      batches: [batch('b', 160, '2026-11-01')],
+      meals: [meal('m1', '2026-11-24', 2, pasta80), meal('m2', '2026-11-25', 2, pasta80)],
+    })
+    expect(shoppingList(e, [ingredients[0]], '2026-11-23', '2026-11-29', new Set(['m2']))).toEqual([
+      { ingredientId: 'pasta', qty: 160, packs: 1 },
+    ])
+  })
+
+  it('with mealIds, lists a to-taste item only if a selected meal uses it', () => {
+    const e = ev({
+      meals: [
+        meal('m1', '2026-11-24', 1, [{ ingredientId: 'salt', qtyPerPortion: null }]),
+        meal('m2', '2026-11-25', 1, pasta80),
+      ],
+    })
+    const both = [ingredients[0], ingredients[2]]
+    expect(shoppingList(e, both, '2026-11-23', '2026-11-29', new Set(['m2']))).toEqual([{ ingredientId: 'pasta', qty: 80, packs: 1 }])
+    expect(shoppingList(e, both, '2026-11-23', '2026-11-29', new Set(['m1']))).toEqual([{ ingredientId: 'salt', qty: null, packs: null }])
+  })
+
+  it('omitting mealIds is the same as selecting every meal in range', () => {
+    const e = ev({
+      batches: [batch('b', 300, '2026-11-01', '2026-11-25')],
+      meals: [meal('m1', '2026-11-24', 2, pasta80), meal('m2', '2026-11-26', 2, pasta80), meal('m3', '2026-11-25', 1, [{ ingredientId: 'salt', qtyPerPortion: null }])],
+    })
+    const all = new Set(['m1', 'm2', 'm3'])
+    expect(shoppingList(e, ingredients, '2026-11-23', '2026-11-29', all)).toEqual(shoppingList(e, ingredients, '2026-11-23', '2026-11-29'))
+  })
 })

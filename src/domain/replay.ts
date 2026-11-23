@@ -156,15 +156,19 @@ export function expiringSoon(ev: PantryEvents, remaining: Map<string, number>, t
     .sort(byExpiry)
 }
 
-/** What to buy for meals in [from, to], plus staples below min stock and to-taste items marked out. */
-export function shoppingList(ev: PantryEvents, ingredients: Ingredient[], from: Day, to: Day): Need[] {
+/**
+ * What to buy for meals in [from, to], plus staples below min stock and to-taste items marked out.
+ * With `mealIds`, only those meals in range are shopped for; the others still consume stock in the replay.
+ */
+export function shoppingList(ev: PantryEvents, ingredients: Ingredient[], from: Day, to: Day, mealIds?: ReadonlySet<string>): Need[] {
   const { remaining, shortfalls } = replay(ev, to)
   const inRange = new Set(ev.meals.filter((m) => m.date >= from && m.date <= to).map((m) => m.id))
+  const shopFor = mealIds ? new Set([...inRange].filter((id) => mealIds.has(id))) : inRange
   const short = new Map<string, number>()
-  for (const s of shortfalls) if (inRange.has(s.mealId)) short.set(s.ingredientId, (short.get(s.ingredientId) ?? 0) + s.missing)
+  for (const s of shortfalls) if (shopFor.has(s.mealId)) short.set(s.ingredientId, (short.get(s.ingredientId) ?? 0) + s.missing)
   const usable = stockByIngredient({ ...ev, batches: ev.batches.filter((b) => b.expiresOn === null || b.expiresOn >= to) }, remaining)
   const toTaste = new Set(
-    ev.meals.filter((m) => inRange.has(m.id)).flatMap((m) => m.lines.filter((l) => l.qtyPerPortion === null).map((l) => l.ingredientId)),
+    ev.meals.filter((m) => shopFor.has(m.id)).flatMap((m) => m.lines.filter((l) => l.qtyPerPortion === null).map((l) => l.ingredientId)),
   )
 
   const needs: Need[] = []
