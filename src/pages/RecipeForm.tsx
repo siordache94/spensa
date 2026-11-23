@@ -3,7 +3,7 @@ import { Alert, Button, Center, CloseButton, Group, Input, Loader, Modal, Number
 import { useMediaQuery } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase.ts'
-import type { Tables, TablesInsert } from '../lib/database.types.ts'
+import type { Tables } from '../lib/database.types.ts'
 import type { Recipe } from './RecipeView.tsx'
 
 type Ingredient = Tables<'ingredients'>
@@ -79,30 +79,19 @@ export default function RecipeForm({ recipe, onClose }: Props) {
 
   const save = useMutation({
     mutationFn: async () => {
-      const row: TablesInsert<'recipes'> = { name: name.trim(), tags, serves, instructions }
-      let id: string
-      if (recipe) {
-        const { error } = await supabase.from('recipes').update(row).eq('id', recipe.id)
-        if (error) throw new Error(error.message)
-        id = recipe.id
-      } else {
-        const { data, error } = await supabase.from('recipes').insert(row).select('id').single()
-        if (error) throw new Error(error.message)
-        id = data.id
-      }
-
-      const { error: deleteError } = await supabase.from('recipe_ingredients').delete().eq('recipe_id', id)
-      if (deleteError) throw new Error(deleteError.message)
-
-      const rows: TablesInsert<'recipe_ingredients'>[] = lines.map((line) => ({
-        recipe_id: id,
-        ingredient_id: line.ingredientId ?? '',
-        qty_per_portion: unitOf(line.ingredientId) === 'to_taste' ? null : Number(line.amount) / serves,
-      }))
-      if (rows.length > 0) {
-        const { error: insertError } = await supabase.from('recipe_ingredients').insert(rows)
-        if (insertError) throw new Error(insertError.message)
-      }
+      const { error } = await supabase.rpc('save_recipe', {
+        // Generated types omit null for uuid args; the RPC takes null to mean "insert".
+        recipe_id: (recipe?.id ?? null) as string,
+        name: name.trim(),
+        instructions,
+        tags,
+        serves,
+        lines: lines.map((line) => ({
+          ingredient_id: line.ingredientId ?? '',
+          qty_per_portion: unitOf(line.ingredientId) === 'to_taste' ? null : Number(line.amount) / serves,
+        })),
+      })
+      if (error) throw new Error(error.message)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] })
