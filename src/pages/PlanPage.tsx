@@ -83,30 +83,39 @@ export default function PlanPage() {
   }
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  // desktop grid aligns slots across columns, so rows are the week's union; a day shows only its own on mobile
+  const weekSlots = [...new Set([...household.slots, ...meals.filter((m) => m.date >= start && m.date <= end).map((m) => m.slot)])]
 
   return (
-    <Stack>
+    <Stack className="sp-planpage">
       <UseSoon />
-      <Group justify="space-between">
-        <Title order={2}>
+      <div className="sp-planhead">
+      <Group justify="space-between" className="sp-ph-a">
+        <Title order={2} className="sp-ph-title">
           {fmt(start, { day: 'numeric', month: 'short' })} – {fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}
         </Title>
-        <Button variant="default" size="xs" onClick={() => setDialog({ kind: 'slots' })}>Slots</Button>
+        <Button variant="default" size="xs" className="sp-ph-slots" onClick={() => setDialog({ kind: 'slots' })}>Slots</Button>
       </Group>
-      <Group>
+      <Group className="sp-ph-nav">
         <Button variant="default" size="xs" onClick={() => setWeekOffset(weekOffset - 1)}>Prev</Button>
         <Button variant="default" size="xs" onClick={() => setWeekOffset(0)}>This week</Button>
         <Button variant="default" size="xs" onClick={() => setWeekOffset(weekOffset + 1)}>Next</Button>
       </Group>
+      </div>
 
-      <div className="sp-plan">
+      <div className="sp-plan" style={{ '--sp-plan-rows': weekSlots.length } as React.CSSProperties}>
+        <div className="sp-gutter" aria-hidden="true">
+          <span className="sp-gutterhead" />
+          {weekSlots.map((slot) => <span key={slot} className="sp-gutterslot">{slot}</span>)}
+        </div>
         {days.map((day) => (
           <DayBand key={day} isToday={day === today} scrollIntoView={day === today} label={fmt(day, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '')}>
             {/* meals in a slot since removed still count as eaten, so keep showing them */}
-            {[...new Set([...household.slots, ...meals.filter((m) => m.date === day).map((m) => m.slot)])].map((slot) => {
+            {weekSlots.map((slot) => {
               const t = { date: day, slot }
+              const own = household.slots.includes(slot) || meals.some((m) => m.date === day && m.slot === slot)
               return (
-                <div key={slot} className="sp-slotrow" onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, t)}>
+                <div key={slot} className={own ? 'sp-slotrow' : 'sp-slotrow sp-ghost'} onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, t)}>
                   <span className="sp-slotname">{slot}</span>
                   <div className="sp-slotmeals">
                     {inSlot(t).map((m) => (
