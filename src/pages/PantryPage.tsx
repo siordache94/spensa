@@ -3,7 +3,7 @@ import { ActionIcon, Alert, Button, Center, Group, Loader, Select, Stack, Switch
 import { DatePickerInput } from '@mantine/dates'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { IconPlus, IconX } from '@tabler/icons-react'
+import { IconPencil, IconPlus, IconX } from '@tabler/icons-react'
 import { invalidatePantry, usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import type { Tables } from '../lib/database.types.ts'
@@ -32,6 +32,8 @@ const total = (lines: Line[]) => round3(lines.reduce((s, l) => s + (l.qty && l.q
 const valid = (l: Line) => l.qty !== null && Number.isFinite(l.qty) && l.qty >= 0
 let nextKey = 0
 
+const shortDate = (d: Day) => new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
 function hint(expiry: Day, today: Day, expiringDays: number) {
   const days = Math.round((Date.parse(expiry) - Date.parse(today)) / 86400000)
   if (days < 0) return { expired: true, text: 'Expired' }
@@ -43,6 +45,7 @@ export default function PantryPage() {
   const queryClient = useQueryClient()
   const { events, ingredients, household, today: day, isPending, error } = usePantry()
   const [search, setSearch] = useState('')
+  const [editing, setEditing] = useState(false)
   // null = untouched: show the server state. Once edited, the draft wins and refetches are ignored.
   const [draft, setDraft] = useState<Draft | null>(null)
 
@@ -88,6 +91,7 @@ export default function PantryPage() {
     onSuccess: async () => {
       await invalidatePantry(queryClient)
       setDraft(null)
+      setEditing(false)
     },
   })
 
@@ -113,24 +117,57 @@ export default function PantryPage() {
 
   return (
     <Stack className="sp-pantry">
-      <Title order={2}>Pantry</Title>
+      <Group justify="space-between" wrap="nowrap">
+        <Title order={2}>Pantry</Title>
+        {!editing && (
+          <ActionIcon variant="subtle" color="gray" size={44} aria-label="Edit pantry" onClick={() => setEditing(true)}>
+            <IconPencil size={22} />
+          </ActionIcon>
+        )}
+      </Group>
 
       <UseSoon />
 
       <TextInput placeholder="Search" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
 
-      <div className="sp-inv-body" data-dirty={dirty ? '' : undefined}>
-        <Text size="sm" c="dimmed" className="sp-inv-help">
-          Amounts already account for today's planned meals. Correct what's off; 0 means gone.
-        </Text>
+      <div className="sp-inv-body" data-editing={editing ? '' : undefined}>
+        {editing && (
+          <Text size="sm" c="dimmed" className="sp-inv-help">
+            Amounts already account for today's planned meals. Correct what's off; 0 means gone.
+          </Text>
+        )}
         {save.error && <Alert color="red" mx="md" mb="xs">{save.error.message}</Alert>}
-        {view.shown.length === 0 && <Text px="md" c="dimmed">Nothing in the pantry yet. Add an item below.</Text>}
+        {view.shown.length === 0 && !editing && (
+          <Stack align="flex-start" px="md" py="md" gap="sm">
+            <Text>Nothing in the pantry yet.</Text>
+            <Button onClick={() => setEditing(true)}>Add items</Button>
+          </Stack>
+        )}
+        {view.shown.length === 0 && editing && <Text px="md" c="dimmed">Nothing in the pantry yet. Add an item below.</Text>}
         {view.shown.length > 0 && visible.length === 0 && <Text px="md" c="dimmed">No matches.</Text>}
 
         {visible.map((id) => {
           const ing = byId.get(id)!
           const mine = view.lines.filter((l) => l.ingredientId === id)
           const unit = ing.unit === 'count' ? '' : ing.unit
+          if (!editing) {
+            const rows = mine.map((l) => ({ l, h: l.expiry ? hint(l.expiry, day, household.expiring_days) : null }))
+            const detailed = mine.length > 1 || mine.some((l) => l.expiry)
+            return (
+              <div key={id} className="sp-inv-read">
+                <div className="sp-inv-rname">
+                  {ing.name}
+                  {detailed && rows.map(({ l, h }) => (
+                    <span key={l.key} className="sp-inv-sub">
+                      {l.qty}{unit && ` ${unit}`}{l.expiry && ` · expires ${shortDate(l.expiry)}`}
+                      {h && <span className="sp-inv-hint" data-expired={h.expired ? '' : undefined}>{h.text}</span>}
+                    </span>
+                  ))}
+                </div>
+                <span className="sp-inv-amt">{total(mine)}<small>{unit}</small></span>
+              </div>
+            )
+          }
           return (
             <section key={id} aria-label={ing.name}>
               <div className="sp-inv-band">
@@ -191,6 +228,7 @@ export default function PantryPage() {
           )
         })}
 
+        {editing && (
         <div className="sp-inv-add">
           <Select
             label="Add item"
@@ -206,6 +244,7 @@ export default function PantryPage() {
             }}
           />
         </div>
+        )}
       </div>
 
       {toTaste.length > 0 && (
@@ -215,10 +254,10 @@ export default function PantryPage() {
         </Stack>
       )}
 
-      {dirty && (
-        <div className="sp-savebar" role="region" aria-label="Unsaved changes">
-          <Button onClick={() => save.mutate()} disabled={!view.lines.every(valid)} loading={save.isPending}>Save changes</Button>
-          <Button variant="default" onClick={() => { setDraft(null); save.reset() }} disabled={save.isPending}>Discard</Button>
+      {editing && (
+        <div className="sp-savebar" role="region" aria-label="Edit pantry">
+          <Button onClick={() => save.mutate()} disabled={!dirty || !view.lines.every(valid)} loading={save.isPending}>Save changes</Button>
+          <Button variant="default" onClick={() => { setDraft(null); setEditing(false); save.reset() }} disabled={save.isPending}>{dirty ? 'Discard' : 'Cancel'}</Button>
         </div>
       )}
     </Stack>

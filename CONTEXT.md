@@ -12,7 +12,7 @@ Stack: Vite + React + TypeScript, Mantine, TanStack Query, React Router, Supabas
 - **Recipe**: name, markdown instructions, optional tags, and **recipe ingredients**. Amounts are entered for a chosen **serves N** (1, 2, 3, 4, 6, 8; default 2) and stored **per portion**.
 - **Slot**: a meal time in a day (default: lunch, dinner; configurable per household).
 - **Planned meal**: date + slot + recipe + portions. A slot can hold several. A planned meal counts as **eaten on its date**, whether or not it was cooked. Past days can be edited.
-- **Batch**: one purchase of an ingredient: quantity, date added, optional expiry. The pantry page lists batches per ingredient and edits them in place.
+- **Batch**: one purchase of an ingredient: quantity, date added, optional expiry. The pantry page lists a total per ingredient (batches as sub-lines) and edits batches in place once the pen icon enters edit mode.
 - **Adjustment**: a manual stock change: `used X`, `set remaining to X`, `finished`, or `discard` (recorded as waste). Applies to the batch that expires soonest unless a batch is picked.
 - **Snapshot**: the recorded remaining quantity of every batch at a moment. Saved by an **inventory check** (the Pantry page's "Save changes"), or by "confirm the rest?" at the end of a shopping trip. A snapshot is the truth: events before it no longer change stock.
 - **Replay**: how stock is computed. Start from the latest snapshot, then apply batches, planned meals and adjustments in date order. Meals use the batches that expire soonest first (FEFO). Nothing derived is stored. See [ADR 0001](docs/adr/0001-stock-by-replay.md).

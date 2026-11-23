@@ -241,7 +241,7 @@ Bottom tabs: icon over 11px caps label, secondary grey; active label is yellow (
 Segmented: panel track with 1px rule, yellow indicator, Ink bold active label, 40px label height. Badge: caps Barlow 0.1em. Menu items 44px min, rule-coloured hover. Accordion hover is the rule colour. Modals, drawers, popovers and dropdowns use the panel with a 1px rule border and a Barlow heading.
 
 ### Pantry save bar
-The Pantry page is the inventory check, edited in place: category bands per ingredient, batch rows (stepper, expiry, remove), and an expiry hint (6px square marker, caps) when a batch is expired or inside the expiring window. Once anything changes, a pinned panel (same position and shadow as the dock: bottom 68px on phones, content column bottom at 48em and up) offers primary "Save changes" and default "Discard".
+The Pantry page opens in read mode: one flat hairline row per ingredient (name left, total figure plus unit right, count items without a unit), compact sub-lines such as "300 g · expires 29 Nov" when there are several batches or an expiry, and the expiry hint (6px square marker, caps) when a batch is expired or inside the expiring window. A 44px pencil beside the title enters edit mode: category bands per ingredient, batch rows (stepper, expiry, remove) and the help text. In edit mode the pinned panel (same position and shadow as the dock: bottom 68px on phones, content column bottom at 48em and up) is always shown: primary "Save changes" (disabled until something changes) and default "Discard" ("Cancel" while unchanged). Saving or leaving returns to read mode.
 
 ### Offline badge
 Header pill, 12px caps Barlow 0.1em, accent text, 1px yellow outline, shown while ticks are queued.

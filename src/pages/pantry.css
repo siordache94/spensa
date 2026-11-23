@@ -1,6 +1,6 @@
 /* Pantry: gate-board bands and compact batch rows. Flat, hairline-separated, no shadows. */
 .sp-inv-body { margin-inline: calc(var(--mantine-spacing-md) * -1); }
-.sp-inv-body[data-dirty] { padding-bottom: 80px; } /* clears the save bar */
+.sp-inv-body[data-editing] { padding-bottom: 80px; } /* clears the save bar */
 .sp-inv-help { padding: 4px 16px 12px; max-width: 65ch; }
 .sp-inv-band {
   display: flex; align-items: baseline; gap: 8px;
@@ -32,6 +32,12 @@
   .sp-pantry { max-width: 760px; margin-inline: auto; }
   .sp-inv-body { margin-inline: 0; }
 }
+.sp-inv-read { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--row-h, 44px); padding: 6px 16px; border-bottom: 1px solid var(--sp-rule); }
+.sp-inv-rname { min-width: 0; font-size: var(--name-size, 16px); font-weight: 500; line-height: 1.2; color: var(--sp-text); overflow-wrap: anywhere; }
+.sp-inv-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; line-height: 1.15; color: var(--sp-text2); }
+.sp-inv-sub > .sp-inv-hint { padding: 2px 0 0; }
+.sp-inv-amt { flex: none; font-variant-numeric: tabular-nums lining-nums; font-size: var(--amount-size, 16px); font-weight: 600; line-height: 1; }
+.sp-inv-amt small { padding-left: 6px; font-size: 14px; font-weight: 400; color: var(--sp-text2); }
 .sp-inv-hint { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; font: 600 12px/1 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); }
 .sp-inv-hint::before { content: ''; width: 6px; height: 6px; background: var(--sp-accent); }
 .sp-inv-hint[data-expired] { color: var(--sp-red); }
