@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Badge, Box, Button, Card, Group, Loader, Menu, SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import { Alert, Button, Group, Loader, Menu, Stack, Title } from '@mantine/core'
 import { usePantry } from '../lib/pantry.ts'
 import { supabase } from '../lib/supabase.ts'
 import { addDays, replay } from '../domain/replay.ts'
 import { memberLabel, useMembers, useMyId } from '../lib/members.ts'
 import UseSoon from './UseSoon.tsx'
+import './plan.css'
 import { CookModal, MealModal, MoveCopyModal, SlotsModal, useWrite, type Target } from './PlanEntryModals.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
-type Marker = { color: string; text: string }
+type Marker = { kind: 'short' | 'expiring'; text: string }
 
 type Dialog =
   | { kind: 'add'; target: Target }
@@ -42,8 +43,9 @@ export default function PlanPage() {
 
     for (const s of replay(events, today).shortfalls) {
       const ing = name(s.ingredientId)
-      const unit = ing?.unit === 'count' ? '' : (ing?.unit ?? '')
-      add(s.mealId, { color: 'red', text: `short by ${Math.round(s.missing * 10) / 10}${unit} ${ing?.name ?? ''}` })
+      const n = Math.round(s.missing * 10) / 10
+      const text = ing?.unit === 'count' ? `${ing.name} × ${n}` : `${ing?.name ?? ''} ${n} ${ing?.unit ?? ''}`.trim()
+      add(s.mealId, { kind: 'short', text: `short: ${text}` })
     }
     if (end > today) {
       const limit = addDays(today, household.expiring_days)
@@ -54,7 +56,7 @@ export default function PlanPage() {
         const key = `${c.mealId}:${b?.ingredientId}`
         if (!b?.expiresOn || b.expiresOn > limit || seen.has(key)) continue
         seen.add(key)
-        add(c.mealId, { color: 'yellow', text: `uses expiring ${name(b.ingredientId)?.name ?? ''}` })
+        add(c.mealId, { kind: 'expiring', text: `Uses expiring ${name(b.ingredientId)?.name ?? ''}` })
       }
     }
     return out
@@ -97,38 +99,35 @@ export default function PlanPage() {
         <Button variant="default" size="xs" onClick={() => setWeekOffset(weekOffset + 1)}>Next</Button>
       </Group>
 
-      <SimpleGrid cols={{ base: 1, sm: 7 }} spacing="xs">
+      <div className="sp-plan">
         {days.map((day) => (
-          <DayCard key={day} isToday={day === today} scrollIntoView={day === today}>
-            <Text fw={600} size="sm">{fmt(day, { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
+          <DayBand key={day} isToday={day === today} scrollIntoView={day === today} label={fmt(day, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '')}>
             {/* meals in a slot since removed still count as eaten, so keep showing them */}
             {[...new Set([...household.slots, ...meals.filter((m) => m.date === day).map((m) => m.slot)])].map((slot) => {
               const t = { date: day, slot }
               return (
-                <Box key={slot} onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, t)} mt="xs">
-                  <Group justify="space-between" gap="xs">
-                    <Text size="xs" c="dimmed" tt="uppercase">{slot}</Text>
-                    <Button variant="subtle" size="compact-xs" aria-label={`Add to ${slot}`} onClick={() => setDialog({ kind: 'add', target: t })}>+</Button>
-                  </Group>
-                  <Stack gap={4} mih={8}>
+                <div key={slot} className="sp-slotrow" onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, t)}>
+                  <span className="sp-slotname">{slot}</span>
+                  <div className="sp-slotmeals">
                     {inSlot(t).map((m) => (
                       <Menu key={m.id} withinPortal>
                         <Menu.Target>
-                          <Box
+                          <button
+                            type="button"
+                            className="sp-mealrow"
                             draggable
                             title="Drag to another slot; hold Alt while dropping to copy"
                             onDragStart={(e) => e.dataTransfer.setData('text/plain', m.id)}
-                            p={6}
-                            style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 4, cursor: 'pointer' }}
                           >
-                            <Text size="sm">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</Text>
-                            {m.cook_id && (
-                              <span className="sp-cook">{(() => { const c = members?.find((x) => x.user_id === m.cook_id); return c ? memberLabel(c) : '…' })()}</span>
-                            )}
+                            <span className="sp-mealname">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</span>
+                            {m.cook_id && (() => {
+                              const c = members?.find((x) => x.user_id === m.cook_id)
+                              return c ? <span className="sp-cook"><b>Cook</b> · {memberLabel(c)}</span> : null
+                            })()}
                             {(markers.get(m.id) ?? []).map((k, i) => (
-                              <Badge key={i} color={k.color} size="xs" variant="light" style={{ height: 'auto', whiteSpace: 'normal' }}>{k.text}</Badge>
+                              <span key={i} className={k.kind === 'short' ? 'sp-mark sp-short' : 'sp-mark sp-exp'}>{k.text}</span>
                             ))}
-                          </Box>
+                          </button>
                         </Menu.Target>
                         <Menu.Dropdown>
                           {me && (
@@ -144,13 +143,14 @@ export default function PlanPage() {
                         </Menu.Dropdown>
                       </Menu>
                     ))}
-                  </Stack>
-                </Box>
+                  </div>
+                  <button type="button" className="sp-addmeal" aria-label={`Add to ${slot}`} onClick={() => setDialog({ kind: 'add', target: t })}>+</button>
+                </div>
               )
             })}
-          </DayCard>
+          </DayBand>
         ))}
-      </SimpleGrid>
+      </div>
 
       {dialog?.kind === 'add' && (
         <MealModal target={dialog.target} position={nextPosition(dialog.target)} onClose={() => setDialog(null)} />
@@ -167,15 +167,15 @@ export default function PlanPage() {
   )
 }
 
-function DayCard({ isToday, scrollIntoView, children }: { isToday: boolean; scrollIntoView: boolean; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
+function DayBand({ isToday, scrollIntoView, label, children }: { isToday: boolean; scrollIntoView: boolean; label: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLElement>(null)
   useEffect(() => {
-    // Only matters on mobile, where days are stacked; harmless on desktop.
     if (scrollIntoView && window.matchMedia('(max-width: 48em)').matches) ref.current?.scrollIntoView()
   }, [scrollIntoView])
   return (
-    <Card ref={ref} withBorder padding="xs" style={isToday ? { borderColor: 'var(--mantine-primary-color-filled)', borderWidth: 2 } : undefined}>
+    <section ref={ref} className={isToday ? 'sp-day sp-today' : 'sp-day'}>
+      <h3 className="sp-dayhead">{label}{isToday && <small>Today</small>}</h3>
       {children}
-    </Card>
+    </section>
   )
 }

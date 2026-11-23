@@ -74,7 +74,7 @@
 
 html { background: var(--sp-body); }
 body {
-  font-variant-numeric: tabular-nums lining-nums;
+  font-variant-numeric: lining-nums; /* tabular figures widen commas and full stops in this face; only figure columns get them */
   -webkit-font-smoothing: antialiased;
   caret-color: var(--sp-accent);
 }
@@ -135,6 +135,9 @@ body {
 /* Button: filled yellow keeps ink text; label font weight */
 .sp-button { font-weight: 600; }
 
+/* Figure columns only */
+.sp-num, .sp-seg-cell > span, .sp-qty, .sp-stepper-value, .mantine-NumberInput-input { font-variant-numeric: tabular-nums lining-nums; }
+
 /* Who cooks: small caps chip on a planned meal */
 .sp-cook {
   display: inline-block;
@@ -144,9 +147,8 @@ body {
   border: 1px solid var(--sp-edge);
   color: var(--sp-text);
   font-family: var(--sp-label);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   overflow: hidden;
   text-overflow: ellipsis;

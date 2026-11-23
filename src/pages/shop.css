@@ -5,7 +5,6 @@
   --c-unit: 44px;
   --c-pack: 60px;
   --cols: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit) var(--c-pack);
-  font-variant-numeric: lining-nums; /* tabular figures widen commas and full stops in this face; only figures get them */
   padding-bottom: 150px; /* clears the pinned dock above the tab bar */
   margin-inline: calc(var(--mantine-spacing-md) * -1);
 }
@@ -47,7 +46,9 @@ button.sp-name { background: none; border: 0; font-family: inherit; cursor: poin
 .sp-cart-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; margin-top: 12px; min-height: 44px; border-bottom: 1px solid var(--sp-edge); }
 .sp-cart-head > span { font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text); }
 .sp-row.sp-done .sp-name, .sp-row.sp-done .sp-num { color: var(--sp-text2); }
-.sp-row.sp-held { background: var(--mantine-primary-color-light); border: 1px solid var(--sp-yellow); }
+.sp-row.sp-held { background: var(--mantine-primary-color-light); box-shadow: inset 0 0 0 1px var(--sp-yellow); }
+:root[data-spensa-theme='light'] .sp-row.sp-held { background: rgba(245, 204, 59, 0.5); }
+:root[data-spensa-theme='light'] .sp-held .sp-name, :root[data-spensa-theme='light'] .sp-held .sp-name em, :root[data-spensa-theme='light'] .sp-held .sp-num { color: var(--sp-ink); }
 .sp-held .sp-name em { color: var(--sp-accent); }
 .sp-ack { position: absolute; inset: 0 0 0 var(--c-tick); background: none; border: 0; cursor: pointer; }
 

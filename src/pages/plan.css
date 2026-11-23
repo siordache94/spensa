@@ -1,0 +1,34 @@
+/* Plan: days as board bands, slots as rows, meals as flat rows on the panel. */
+.sp-plan { margin-inline: calc(var(--mantine-spacing-md) * -1); max-width: 720px; }
+.sp-day { scroll-margin-top: 56px; background: var(--sp-panel); border-block: 1px solid var(--sp-rule); margin-bottom: 12px; }
+.sp-dayhead {
+  display: flex; align-items: center; gap: 10px; min-height: 32px; margin: 0; padding: 0 16px;
+  border-bottom: 1px solid var(--sp-edge);
+  font: 600 14px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
+}
+.sp-dayhead small { font: 600 12px/1 var(--sp-label); letter-spacing: 0.1em; color: var(--sp-accent); }
+.sp-today .sp-dayhead { color: var(--sp-accent); }
+.sp-today .sp-dayhead::before { content: ''; width: 8px; height: 8px; background: var(--sp-yellow); flex: none; }
+:root[data-spensa-theme='light'] .sp-today .sp-dayhead { background: var(--sp-yellow); color: var(--sp-ink); }
+:root[data-spensa-theme='light'] .sp-today .sp-dayhead small { color: var(--sp-ink); }
+:root[data-spensa-theme='light'] .sp-today .sp-dayhead::before { background: var(--sp-ink); }
+
+.sp-slotrow { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; align-items: start; padding: 0 4px 0 16px; border-bottom: 1px solid var(--sp-rule); }
+.sp-slotrow:last-child { border-bottom: 0; }
+.sp-slotname { padding-top: 15px; font: 600 12px/1 var(--sp-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sp-text2); }
+.sp-slotmeals { display: flex; flex-direction: column; min-width: 0; }
+.sp-mealrow {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 44px; padding: 8px 4px 8px 0;
+  background: none; border: 0; border-top: 1px solid var(--sp-rule); color: var(--sp-text); font: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+.sp-mealrow:first-child { border-top: 0; }
+.sp-mealname { font-size: 16px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
+.sp-cook b { font-weight: 600; text-transform: uppercase; color: var(--sp-text2); }
+.sp-mark { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.25; color: var(--sp-text); }
+.sp-short::before { content: ''; width: 6px; height: 6px; background: var(--sp-red); flex: none; }
+.sp-exp { border: 1px solid var(--sp-yellow); padding: 1px 6px; }
+.sp-addmeal {
+  width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; cursor: pointer;
+  color: var(--sp-accent); font: 600 24px/1 var(--sp-label);
+}
+.sp-addmeal:hover { background: var(--sp-rule); }
