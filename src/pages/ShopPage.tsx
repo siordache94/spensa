@@ -90,7 +90,7 @@ function BuyModal({ buy, pending, onBuy, onClose }: { buy: Buy; pending: boolean
 function Tick({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
   return (
     <span className="sp-tickcell">
-      <Checkbox aria-label={label} checked={checked} onChange={onChange} />
+      <Checkbox aria-label={label} checked={checked} onChange={onChange} onClick={(ev) => ev.stopPropagation()} />
     </span>
   )
 }
@@ -451,7 +451,8 @@ export default function ShopPage() {
         <div key={category ?? 'uncategorised'}>
           <div className="sp-band"><span>{category ?? 'Other'}</span><small>{rows.length} to buy</small></div>
           {rows.map((e) => (
-            <label key={e.key} className="sp-row">
+            // the row handles the tap itself: label-to-checkbox forwarding was unreliable on touch
+            <div key={e.key} className="sp-row" onClick={() => e.onTick()}>
               <Tick checked={false} label={`Bought ${e.name}`} onChange={() => e.onTick()} />
               <span className="sp-name">{e.name}{e.note && <em>{e.note}</em>}{e.pack && <small className="sp-packline">{e.pack}</small>}</span>
               <Figure figure={e.figure} unit={e.unit} free={e.free} />
@@ -461,12 +462,12 @@ export default function ShopPage() {
                   variant="subtle"
                   color="gray"
                   aria-label={`Change amount for ${e.name}`}
-                  onClick={(ev) => { ev.preventDefault(); setBuying(e.buy!) }}
+                  onClick={(ev) => { ev.stopPropagation(); setBuying(e.buy!) }}
                 >
                   <IconPencil size={20} stroke={1.75} />
                 </ActionIcon>
               ) : <span />}
-            </label>
+            </div>
           ))}
         </div>
       ))}

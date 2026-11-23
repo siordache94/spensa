@@ -199,3 +199,10 @@ body {
 .sp-stepper-field:not([data-unit]) .sp-stepper-input { width: 100%; text-align: center; }
 .sp-stepper-input::placeholder { color: var(--sp-text2); }
 .sp-stepper-unit { color: var(--sp-text2); font-size: 14px; font-weight: 500; align-self: center; white-space: nowrap; }
+
+/* Tappable surfaces never start a text selection (long-press on a row selected words instead of acting). */
+button, label, [role='button'], [role='tab'], [role='radio'], a,
+.sp-row, .sp-meal, .sp-mealrow, .sp-addmeal, .sp-band, .sp-cols, .sp-pass, .sp-stepper,
+.mantine-UnstyledButton-root, .mantine-SegmentedControl-root, .mantine-Checkbox-root, .mantine-AppShell-navbar, .mantine-AppShell-footer {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
