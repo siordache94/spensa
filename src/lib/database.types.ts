@@ -297,7 +297,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "create_household":
+            "buy_shopping_item":
+{ Args: { "expires_on": string,"item_id": string,"qty": number }; Returns: string
+                           },
+"create_household":
 { Args: { "name": string }; Returns: string
                            },
 "join_household":
@@ -308,6 +311,9 @@ isOneToOne: false
                            },
 "save_recipe":
 { Args: { "instructions": string,"lines": Json,"name": string,"recipe_id": string,"serves": number,"tags": (string)[] }; Returns: string
+                           },
+"save_snapshot":
+{ Args: { "batches": Json,"on_date": string }; Returns: string
                            }
           }
           Enums: {

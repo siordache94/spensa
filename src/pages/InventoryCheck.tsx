@@ -30,21 +30,13 @@ export default function InventoryCheck({ groups, today, onClose }: Props) {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { data: snapshot, error } = await supabase.from('snapshots').insert({ on_date: today }).select('id').single()
-      if (error || !snapshot) throw new Error(error?.message ?? 'Snapshot not saved')
-
-      const lines = groups
+      // No lines: every batch is zero, which is what the snapshot says.
+      const batches = groups
         .flatMap((g) => g.rows)
-        .map((r) => ({ snapshot_id: snapshot.id, batch_id: r.batch.id, qty: num(qtys[r.batch.id]) }))
+        .map((r) => ({ batch_id: r.batch.id, qty: num(qtys[r.batch.id]) }))
         .filter((l) => l.qty > 0)
-      if (lines.length === 0) return // no lines: every batch is zero, which is what the snapshot says
-
-      const { error: linesError } = await supabase.from('snapshot_batches').insert(lines)
-      if (linesError) {
-        // A snapshot with no lines would zero every batch, so take it back out.
-        await supabase.from('snapshots').delete().eq('id', snapshot.id)
-        throw new Error(linesError.message)
-      }
+      const { error } = await supabase.rpc('save_snapshot', { on_date: today, batches })
+      if (error) throw new Error(error.message)
     },
     onSuccess: onClose,
     onSettled: () => invalidatePantry(queryClient),

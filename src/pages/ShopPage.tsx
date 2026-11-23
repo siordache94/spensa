@@ -119,14 +119,20 @@ export default function ShopPage() {
 
   const buy = useMutation({
     mutationFn: async (b: Buy) => {
+      if (b.shoppingItemId) {
+        const { error } = await supabase.rpc('buy_shopping_item', {
+          item_id: b.shoppingItemId,
+          qty: b.qty,
+          // Generated types omit null for date args; the RPC takes null to mean "no expiry".
+          expires_on: b.expiresOn as string,
+        })
+        if (error) throw new Error(error.message)
+        return
+      }
       const { error } = await supabase
         .from('batches')
         .insert({ ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn })
       if (error) throw new Error(error.message)
-      if (b.shoppingItemId) {
-        const { error: removeError } = await supabase.from('shopping_items').delete().eq('id', b.shoppingItemId)
-        if (removeError) throw new Error(removeError.message)
-      }
     },
     onSuccess: () => setBuying(null),
     onSettled: (_data, _error, b) => {
@@ -180,15 +186,11 @@ export default function ShopPage() {
     mutationFn: async () => {
       if (!events || !today) throw new Error('Still loading, try again.')
       const { remaining } = replay(events, today)
-      const { data: snap, error } = await supabase.from('snapshots').insert({ on_date: today }).select('id').single()
-      if (error) throw new Error(error.message)
-      const rows = [...remaining]
+      const batches = [...remaining]
         .filter(([, qty]) => qty > 0)
-        .map(([batchId, qty]) => ({ snapshot_id: snap.id, batch_id: batchId, qty: round3(qty) }))
-      if (rows.length > 0) {
-        const { error: rowsError } = await supabase.from('snapshot_batches').insert(rows)
-        if (rowsError) throw new Error(rowsError.message)
-      }
+        .map(([batchId, qty]) => ({ batch_id: batchId, qty: round3(qty) }))
+      const { error } = await supabase.rpc('save_snapshot', { on_date: today, batches })
+      if (error) throw new Error(error.message)
     },
     onSuccess: () => setSnapshotOpen(false),
     onSettled: () => invalidatePantry(queryClient),
