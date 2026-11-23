@@ -19,6 +19,9 @@ export type MealRow = {
   id: string
   date: string
   portions: number
+  not_cooked?: boolean
+  /** Per-meal amounts (live rows only); when not empty they replace the recipe's lines for this meal. */
+  planned_meal_lines?: { ingredient_id: string; qty_total: number | string | null }[] | null
   recipes: { recipe_ingredients: { ingredient_id: string; qty_per_portion: number | string | null }[] } | null
 }
 export type AdjustmentRow = {
@@ -59,6 +62,8 @@ export function buildEvents(
       date: m.date,
       portions: m.portions,
       lines: (m.recipes?.recipe_ingredients ?? []).map((l) => ({ ingredientId: l.ingredient_id, qtyPerPortion: num(l.qty_per_portion) })),
+      notCooked: m.not_cooked ?? false,
+      override: m.planned_meal_lines?.length ? m.planned_meal_lines.map((l) => ({ ingredientId: l.ingredient_id, qty: num(l.qty_total) })) : undefined,
     })),
     adjustments: rows.adjustments.map((a) => ({
       ingredientId: a.ingredient_id,

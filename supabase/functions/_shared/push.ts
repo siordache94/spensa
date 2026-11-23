@@ -7,6 +7,7 @@ import { replay, type Ingredient, type PantryEvents } from '../../../src/domain/
 import { resolvedKeys, toBuyKeys, type ShoppingItem } from '../../../src/domain/toBuy.ts'
 import { isGone, type PushPayload } from '../../../src/lib/notify.ts'
 import { selectedMealIds, tripRange } from '../../../src/lib/trip.ts'
+import type { CheckinMeal, SlotEndTimes } from '../../../src/lib/checkin.ts'
 
 export const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -55,9 +56,9 @@ export async function sendPush(admin: Admin, userIds: string[], payload: PushPay
   await Promise.all((subs ?? []).map(async (s) => {
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, {
-        TTL: payload.kind === 'expiry' ? 12 * 3600 : 3600,
-        urgency: 'normal',
-        topic: payload.kind, // a newer push of the same kind replaces one still queued for an offline phone
+        TTL: payload.kind === 'expiry' ? 12 * 3600 : payload.kind === 'checkin' ? 6 * 3600 : 3600,
+        urgency: payload.kind === 'checkin' ? 'low' : 'normal',
+        topic: payload.topic ?? payload.kind, // a newer push of the same kind replaces one still queued for an offline phone
         timeout: 10_000,
       })
       result.sent++
@@ -91,6 +92,9 @@ export type HouseholdData = {
   tz: string
   today: string
   reminderDays: number
+  slotEndTimes: SlotEndTimes
+  /** Meals with what a check-in needs (cook, slot, recipe name). Not-cooked meals are left out. */
+  checkinMeals: CheckinMeal[]
   events: PantryEvents
   ingredients: Ingredient[]
   names: Map<string, string>
@@ -101,10 +105,12 @@ export type HouseholdData = {
   resolved: () => Set<string>
   /** Stock left on `today`. */
   remaining: () => Map<string, number>
+  /** Meals that had a shortfall in the replay up to today (any amount). */
+  shortMealIds: () => Set<string>
 }
 
 export async function loadHousehold(admin: Admin, id: string, now = new Date()): Promise<HouseholdData> {
-  const { data: h, error } = await admin.from('households').select('timezone, horizon_days, expiry_reminder_days').eq('id', id).single()
+  const { data: h, error } = await admin.from('households').select('timezone, horizon_days, expiry_reminder_days, slot_end_times').eq('id', id).single()
   if (error) throw new Error(error.message)
   const tz = h.timezone
   const live = { household_id: id }
@@ -112,8 +118,9 @@ export async function loadHousehold(admin: Admin, id: string, now = new Date()):
     all((a, b) => admin.from('batches').select('*').match(live).is('deleted_at', null).order('id').range(a, b)),
     all((a, b) =>
       admin.from('planned_meals')
-        .select('id, date, portions, skip_shopping, recipes(id, recipe_ingredients(ingredient_id, qty_per_portion, deleted_at))')
+        .select('id, date, slot, cook_id, created_at, portions, skip_shopping, not_cooked, planned_meal_lines(ingredient_id, qty_total), recipes(id, name, recipe_ingredients(ingredient_id, qty_per_portion, deleted_at))')
         .match(live).is('deleted_at', null).is('recipes.deleted_at', null).is('recipes.recipe_ingredients.deleted_at', null)
+        .is('planned_meal_lines.deleted_at', null)
         .order('id').range(a, b)),
     all((a, b) => admin.from('adjustments').select('*').match(live).is('deleted_at', null).order('id').range(a, b)),
     admin.from('snapshots').select('*, snapshot_batches(batch_id, qty)').match(live).is('deleted_at', null)
@@ -130,7 +137,11 @@ export async function loadHousehold(admin: Admin, id: string, now = new Date()):
   const { from, to } = tripRange(today, h.horizon_days)
   const mealIds = selectedMealIds(meals, from, to)
   return {
-    id, tz, today, reminderDays: h.expiry_reminder_days, events, ingredients, items,
+    id, tz, today, reminderDays: h.expiry_reminder_days, slotEndTimes: (h.slot_end_times ?? {}) as SlotEndTimes, events, ingredients, items,
+    checkinMeals: meals.filter((m) => !m.not_cooked).map((m) => ({
+      id: m.id, date: m.date, slot: m.slot, cookId: m.cook_id, createdAt: m.created_at, recipeName: m.recipes?.name ?? null,
+    })),
+    shortMealIds: () => new Set(replay(events, today).shortfalls.map((s) => s.mealId)),
     names: new Map(ingredientRows.map((i) => [i.id, i.name])),
     keys: () => toBuyKeys({ events, ingredients, items, from, to, mealIds, today }),
     resolved: () => resolvedKeys({ events, ingredients, items, today }),
@@ -138,7 +149,7 @@ export async function loadHousehold(admin: Admin, id: string, now = new Date()):
   }
 }
 
-export type Member = { user_id: string; display_name: string | null; list_changes: boolean; expiry_time: string | null; expiry_checked_on: string | null; prefs: boolean }
+export type Member = { user_id: string; display_name: string | null; list_changes: boolean; meal_checkins: boolean; expiry_time: string | null; expiry_checked_on: string | null; prefs: boolean }
 
 /** Household members with their push prefs (no row = defaults: list changes on, reminder at 09:00). */
 export async function loadMembers(admin: Admin, hid: string): Promise<Member[]> {
@@ -152,6 +163,7 @@ export async function loadMembers(admin: Admin, hid: string): Promise<Member[]> 
       user_id: m.user_id,
       display_name: m.display_name,
       list_changes: p?.list_changes ?? true,
+      meal_checkins: p?.meal_checkins ?? true,
       expiry_time: p ? p.expiry_time : '09:00:00',
       expiry_checked_on: p?.expiry_checked_on ?? null,
       prefs: !!p,

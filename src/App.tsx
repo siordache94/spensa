@@ -18,6 +18,7 @@ import PantryPage from './pages/PantryPage.tsx'
 import ShopPage from './pages/ShopPage.tsx'
 import IngredientsPage from './pages/IngredientsPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
+import { useCheckinsSync } from './lib/checkins.ts'
 
 const navItems: { to: string; label: string; end: boolean; icon: Icon }[] = [
   { to: '/', label: 'Plan', end: true, icon: IconCalendarWeek },
@@ -144,6 +145,7 @@ function HouseholdMenu({ household }: { household: Household }) {
 
 function Shell({ household }: { household: Household }) {
   useResyncSubscription()
+  useCheckinsSync()
   return (
     <AppShell
       header={{ height: 'calc(48px + env(safe-area-inset-top, 0px))' }}

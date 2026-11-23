@@ -18,11 +18,21 @@ export interface RecipeLine {
   qtyPerPortion: number | null // null = to taste
 }
 
+/** What one meal takes of an ingredient in total; null = to taste. */
+export interface MealAmount {
+  ingredientId: string
+  qty: number | null
+}
+
 export interface Meal {
   id: string
   date: Day
   portions: number
   lines: RecipeLine[]
+  /** "Didn't cook": the meal consumes nothing (ADR 0005). */
+  notCooked?: boolean
+  /** Per-meal amounts. When present and not empty they replace the recipe lines for this meal (ADR 0005). */
+  override?: MealAmount[]
 }
 
 export interface Adjustment {
@@ -70,6 +80,13 @@ export interface Need {
 
 const EPS = 1e-9
 
+/** What a meal takes: its own amounts when it has any, else the recipe's per-portion lines times portions. Nothing if not cooked. */
+export function mealAmounts(m: Meal): MealAmount[] {
+  if (m.notCooked) return []
+  if (m.override && m.override.length > 0) return m.override
+  return m.lines.map((l) => ({ ingredientId: l.ingredientId, qty: l.qtyPerPortion === null ? null : l.qtyPerPortion * m.portions }))
+}
+
 export const addDays = (d: Day, n: number): Day => {
   const t = new Date(`${d}T00:00:00Z`)
   t.setUTCDate(t.getUTCDate() + n)
@@ -109,9 +126,9 @@ export function replay(
   }
 
   const eat = (m: Meal) => {
-    for (const l of m.lines) {
-      if (l.qtyPerPortion === null) continue
-      const missing = take(fefo(l.ingredientId, m.date), l.qtyPerPortion * m.portions, m.id)
+    for (const l of mealAmounts(m)) {
+      if (l.qty === null) continue
+      const missing = take(fefo(l.ingredientId, m.date), l.qty, m.id)
       if (missing > EPS) shortfalls.push({ mealId: m.id, ingredientId: l.ingredientId, missing })
     }
   }
@@ -170,7 +187,7 @@ export function shoppingList(ev: PantryEvents, ingredients: Ingredient[], from: 
   for (const s of shortfalls) if (shopFor.has(s.mealId)) short.set(s.ingredientId, (short.get(s.ingredientId) ?? 0) + s.missing)
   const usable = stockByIngredient({ ...ev, batches: ev.batches.filter((b) => b.expiresOn === null || b.expiresOn >= to) }, remaining)
   const toTaste = new Set(
-    ev.meals.filter((m) => shopFor.has(m.id)).flatMap((m) => m.lines.filter((l) => l.qtyPerPortion === null).map((l) => l.ingredientId)),
+    ev.meals.filter((m) => shopFor.has(m.id)).flatMap((m) => mealAmounts(m).filter((l) => l.qty === null).map((l) => l.ingredientId)),
   )
 
   const needs: Need[] = []

@@ -123,14 +123,14 @@ isOneToOne: false
                   ]
                 },"households": {
                   Row: {
-                    "created_at": string,"expiring_days": number,"expiry_reminder_days": number,"horizon_days": number,"id": string,"invite_code": string,"name": string,"slots": (string)[],"timezone": string
+                    "created_at": string,"expiring_days": number,"expiry_reminder_days": number,"horizon_days": number,"id": string,"invite_code": string,"name": string,"slot_end_times": NonNullable<Json>,"slots": (string)[],"timezone": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name": string,"slot_end_times"?: NonNullable<Json>,"slots"?: (string)[],"timezone"?: string
                   }
                   Update: {
-                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slots"?: (string)[],"timezone"?: string
+                    "created_at"?: string,"expiring_days"?: number,"expiry_reminder_days"?: number,"horizon_days"?: number,"id"?: string,"invite_code"?: string,"name"?: string,"slot_end_times"?: NonNullable<Json>,"slots"?: (string)[],"timezone"?: string
                   }
                   Relationships: [
                     
@@ -155,16 +155,74 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
-                },"planned_meals": {
+                },"meal_checkins": {
                   Row: {
-                    "cook_id": string | null,"created_at": string,"created_by": string | null,"date": string,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"portions": number,"position": number,"recipe_id": string | null,"skip_shopping": boolean,"slot": string,"updated_at": string | null,"updated_by": string | null
+                    "answer": string | null,"answered_at": string | null,"answered_by": string | null,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"planned_meal_id": string,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date": string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions": number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot": string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "answer"?: string | null,"answered_at"?: string | null,"answered_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id": string,"id"?: string,"planned_meal_id": string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot"?: string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "answer"?: string | null,"answered_at"?: string | null,"answered_by"?: string | null,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"planned_meal_id"?: string,"updated_at"?: string | null,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "meal_checkins_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "meal_checkins_meal_fkey"
+      columns: ["household_id","planned_meal_id"]
+isOneToOne: false
+      referencedRelation: "planned_meals"
+      referencedColumns: ["household_id","id"]
+    }
+                  ]
+                },"planned_meal_lines": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"ingredient_id": string,"planned_meal_id": string,"qty_total": number | null,"updated_at": string | null,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"planned_meal_id": string,"qty_total"?: number | null,"updated_at"?: string | null,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"planned_meal_id"?: string,"qty_total"?: number | null,"updated_at"?: string | null,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "planned_meal_lines_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "planned_meal_lines_ingredient_fkey"
+      columns: ["household_id","ingredient_id"]
+isOneToOne: false
+      referencedRelation: "ingredients"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "planned_meal_lines_meal_fkey"
+      columns: ["household_id","planned_meal_id"]
+isOneToOne: false
+      referencedRelation: "planned_meals"
+      referencedColumns: ["household_id","id"]
+    }
+                  ]
+                },"planned_meals": {
+                  Row: {
+                    "cook_id": string | null,"created_at": string,"created_by": string | null,"date": string,"deleted_at": string | null,"deleted_by": string | null,"household_id": string,"id": string,"not_cooked": boolean,"portions": number,"position": number,"recipe_id": string | null,"skip_shopping": boolean,"slot": string,"updated_at": string | null,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date": string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"not_cooked"?: boolean,"portions": number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot": string,"updated_at"?: string | null,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "cook_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"date"?: string,"deleted_at"?: string | null,"deleted_by"?: string | null,"household_id"?: string,"id"?: string,"not_cooked"?: boolean,"portions"?: number,"position"?: number,"recipe_id"?: string | null,"skip_shopping"?: boolean,"slot"?: string,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -217,14 +275,14 @@ isOneToOne: true
                   ]
                 },"push_prefs": {
                   Row: {
-                    "expiry_checked_on": string | null,"expiry_time": string | null,"list_changes": boolean,"updated_at": string,"user_id": string
+                    "expiry_checked_on": string | null,"expiry_time": string | null,"list_changes": boolean,"meal_checkins": boolean,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"updated_at"?: string,"user_id"?: string
+                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"meal_checkins"?: boolean,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"updated_at"?: string,"user_id"?: string
+                    "expiry_checked_on"?: string | null,"expiry_time"?: string | null,"list_changes"?: boolean,"meal_checkins"?: boolean,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -399,8 +457,26 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "buy_shopping_item":
+            "answer_checkin":
+{ Args: { "p_answer": string,"p_meal": string }; Returns: boolean
+                           },
+"buy_shopping_item":
 { Args: { "added_at": string,"batch_id": string,"expires_on": string,"ingredient_id": string,"item_id": string,"qty": number }; Returns: Json
+                           },
+"checkin_answer_all":
+{ Args: { "p_answer": string }; Returns: number
+                           },
+"checkin_answer_as":
+{ Args: { "p_meal": string,"p_user": string }; Returns: number
+                           },
+"checkin_create":
+{ Args: { "hid": string,"meal_ids": (string)[] }; Returns: (string)[]
+                           },
+"checkin_resolve":
+{ Args: { "p_answer": string,"p_meal": string,"p_user": string }; Returns: boolean
+                           },
+"checkin_unread_count":
+{ Args: { "hid": string }; Returns: number
                            },
 "create_household":
 { Args: { "display_name"?: string,"name": string }; Returns: string
@@ -412,7 +488,7 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
 "finish_shopping":
-{ Args: { "batches": Json,"on_date": string }; Returns: string
+{ Args: { "answers"?: Json,"batches": Json,"on_date": string }; Returns: string
                            },
 "hook_before_user_created":
 { Args: { "event": Json }; Returns: Json
@@ -452,6 +528,9 @@ isOneToOne: false
 "save_inventory_check":
 { Args: { "items": Json,"on_date": string }; Returns: string
                            },
+"save_meal_lines":
+{ Args: { "p_lines": Json,"p_meal": string }; Returns: undefined
+                           },
 "save_pantry_edits":
 { Args: { "adjustments": Json,"expiries"?: Json,"new_batches": Json }; Returns: undefined
                            },
@@ -469,6 +548,9 @@ isOneToOne: false
                            },
 "unbuy":
 { Args: { "batch_id": string }; Returns: undefined
+                           },
+"valid_slot_end_times":
+{ Args: { "j": Json }; Returns: boolean
                            }
           }
           Enums: {

@@ -82,7 +82,7 @@ export async function enablePush(): Promise<void> {
   sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes })
   await save(sub)
   // First time: the defaults (list changes on, reminder at 09:00). Never overwrite choices already made.
-  const { error } = await supabase.from('push_prefs').upsert({ list_changes: true, expiry_time: '09:00' }, { onConflict: 'user_id', ignoreDuplicates: true })
+  const { error } = await supabase.from('push_prefs').upsert({ list_changes: true, meal_checkins: true, expiry_time: '09:00' }, { onConflict: 'user_id', ignoreDuplicates: true })
   if (error) throw new Error(error.message)
 }
 
@@ -118,8 +118,8 @@ export function useResyncSubscription() {
 }
 
 // ---- Per-person prefs --------------------------------------------------------------------------------------
-export type Prefs = { list_changes: boolean; expiry_time: string | null } // expiry_time 'HH:MM', null = Off
-export const DEFAULT_PREFS: Prefs = { list_changes: true, expiry_time: '09:00' }
+export type Prefs = { list_changes: boolean; meal_checkins: boolean; expiry_time: string | null } // expiry_time 'HH:MM', null = Off
+export const DEFAULT_PREFS: Prefs = { list_changes: true, meal_checkins: true, expiry_time: '09:00' }
 
 export function usePushPrefs() {
   const me = useMyId()
@@ -127,9 +127,9 @@ export function usePushPrefs() {
     queryKey: ['push', 'prefs', me],
     enabled: !!me,
     queryFn: async (): Promise<Prefs> => {
-      const { data, error } = await supabase.from('push_prefs').select('list_changes, expiry_time').maybeSingle()
+      const { data, error } = await supabase.from('push_prefs').select('list_changes, meal_checkins, expiry_time').maybeSingle()
       if (error) throw error
-      return data ? { list_changes: data.list_changes, expiry_time: data.expiry_time?.slice(0, 5) ?? null } : DEFAULT_PREFS
+      return data ? { list_changes: data.list_changes, meal_checkins: data.meal_checkins, expiry_time: data.expiry_time?.slice(0, 5) ?? null } : DEFAULT_PREFS
     },
   })
 }

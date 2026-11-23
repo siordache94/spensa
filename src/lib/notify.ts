@@ -6,7 +6,25 @@ import { changeMessage, diffToBuy } from './trip.ts'
 export const LIST_WINDOW_SECONDS = 30
 export const REMINDER_GRACE_MINUTES = 180
 
-export type PushPayload = { title: string; body: string; kind: 'list' | 'expiry' | 'test'; url: string }
+export type PushAction = { action: string; title: string }
+export type PushPayload = {
+  title: string
+  body: string
+  kind: 'list' | 'expiry' | 'test' | 'checkin'
+  url: string
+  /** Android only (iOS ignores it): show the notification without sound or vibration. */
+  silent?: boolean
+  /** Android only: buttons under the notification. The service worker handles the action ids. */
+  actions?: PushAction[]
+  /** Notification tag; default is the kind (a newer push of a kind replaces the older one). */
+  tag?: string
+  /** Push-service topic (a newer push with the same topic replaces one still queued); default is the kind. At most 32 url-safe characters. */
+  topic?: string
+  /** Check-in pushes: the meal, the household's unread count (for the app badge), and how to answer "planned" with no session. */
+  mealId?: string
+  unread?: number
+  answer?: { url: string; token: string }
+}
 
 /** The combined list push, or null when the window netted out to nothing (added then removed again, or bought). */
 export function listChangePush(who: string, before: string[], after: string[], resolved: ReadonlySet<string>): PushPayload | null {

@@ -253,3 +253,69 @@ describe('shoppingList', () => {
     expect(shoppingList(e, ingredients, '2026-11-23', '2026-11-29', all)).toEqual(shoppingList(e, ingredients, '2026-11-23', '2026-11-29'))
   })
 })
+
+describe('didn\'t cook and per-meal amounts (ADR 0005)', () => {
+  const stock = ev({ batches: [batch('p', 300, '2026-11-01')] })
+
+  it('a not-cooked meal consumes nothing and is never short', () => {
+    const e = { ...stock, meals: [{ ...meal('m', '2026-11-05', 4, pasta80), notCooked: true }] }
+    const r = replay(e, '2026-11-10')
+    expect(r.remaining.get('p')).toBe(300)
+    expect(r.shortfalls).toEqual([])
+    expect(r.consumed).toEqual([])
+  })
+
+  it('a not-cooked meal leaves more for later meals', () => {
+    const e = { ...stock, meals: [{ ...meal('a', '2026-11-05', 4, pasta80), notCooked: true }, meal('b', '2026-11-06', 3, pasta80)] }
+    const r = replay(e, '2026-11-10')
+    expect(r.remaining.get('p')).toBe(60)
+    expect(r.shortfalls).toEqual([])
+  })
+
+  it('does not put a not-cooked meal on the shopping list', () => {
+    const e = { ...ev({}), meals: [{ ...meal('m', '2026-11-05', 2, [...pasta80, { ingredientId: 'salt', qtyPerPortion: null }]), notCooked: true }] }
+    const ings: Ingredient[] = [
+      { id: 'pasta', unit: 'g', packSize: null, minStock: null, onHand: false },
+      { id: 'salt', unit: 'to_taste', packSize: null, minStock: null, onHand: false },
+    ]
+    expect(shoppingList(e, ings, '2026-11-01', '2026-11-30')).toEqual([])
+  })
+
+  it('own amounts replace the recipe lines for that meal', () => {
+    const e = { ...stock, meals: [{ ...meal('m', '2026-11-05', 2, pasta80), override: [{ ingredientId: 'pasta', qty: 200 }] }] }
+    const r = replay(e, '2026-11-10')
+    expect(r.remaining.get('p')).toBe(100) // 200 g, not the recipe's 2 x 80 g
+  })
+
+  it('own amounts can add an ingredient the recipe does not have, and drop one it has', () => {
+    const e = {
+      batches: [batch('p', 300, '2026-11-01'), batch('c', 100, '2026-11-01', null, 'cheese'), batch('s', 100, '2026-11-01', null, 'sauce')],
+      meals: [{
+        ...meal('m', '2026-11-05', 2, [...pasta80, { ingredientId: 'sauce', qtyPerPortion: 50 }]),
+        override: [{ ingredientId: 'pasta', qty: 160 }, { ingredientId: 'cheese', qty: 40 }],
+      }],
+      adjustments: [], snapshot: null,
+    }
+    const r = replay(e, '2026-11-10')
+    expect(r.remaining.get('p')).toBe(140)
+    expect(r.remaining.get('c')).toBe(60)
+    expect(r.remaining.get('s')).toBe(100) // the recipe's sauce was left out of this meal
+  })
+
+  it('own amounts that exceed stock are a shortfall for that meal', () => {
+    const e = { ...stock, meals: [{ ...meal('m', '2026-11-05', 2, pasta80), override: [{ ingredientId: 'pasta', qty: 350 }] }] }
+    expect(replay(e, '2026-11-10').shortfalls).toEqual([{ mealId: 'm', ingredientId: 'pasta', missing: 50 }])
+  })
+
+  it('an empty override follows the recipe, and a null amount is to taste (consumes nothing)', () => {
+    expect(replay({ ...stock, meals: [{ ...meal('m', '2026-11-05', 2, pasta80), override: [] }] }, '2026-11-10').remaining.get('p')).toBe(140)
+    const e = { ...stock, meals: [{ ...meal('m', '2026-11-05', 2, pasta80), override: [{ ingredientId: 'pasta', qty: null }] }] }
+    expect(replay(e, '2026-11-10').remaining.get('p')).toBe(300)
+  })
+
+  it('own amounts count for the shopping list', () => {
+    const e = { ...ev({ batches: [batch('p', 100, '2026-11-01')] }), meals: [{ ...meal('m', '2026-11-05', 1, pasta80), override: [{ ingredientId: 'pasta', qty: 250 }] }] }
+    const ings: Ingredient[] = [{ id: 'pasta', unit: 'g', packSize: null, minStock: null, onHand: false }]
+    expect(shoppingList(e, ings, '2026-11-01', '2026-11-30')).toEqual([{ ingredientId: 'pasta', qty: 150, packs: null }])
+  })
+})

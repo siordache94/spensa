@@ -413,6 +413,10 @@ verify_jwt = false
 [functions.push-cron]
 verify_jwt = false
 
+# Called by the service worker with a signed token from the push payload (no session).
+[functions.checkin-answer]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

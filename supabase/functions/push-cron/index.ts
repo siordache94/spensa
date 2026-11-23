@@ -3,6 +3,7 @@
 //   2. refreshes the to-buy baseline (time moves the list too),
 //   3. sends each member's daily expiry reminder when their chosen time has come.
 import { adminClient, hasWebhookSecret, loadHousehold, loadMembers, reply, sendPush } from '../_shared/push.ts'
+import { runCheckins } from '../_shared/checkin.ts'
 import { flushList } from '../_shared/list.ts'
 import { expiringForReminder, expiryPush, reminderDue } from '../../../src/lib/notify.ts'
 
@@ -18,10 +19,24 @@ Deno.serve(async (req) => {
   if (error) return reply(500, { error: 'failed' })
   const { data: mem } = await admin.from('household_members').select('household_id').in('user_id', [...new Set((subs ?? []).map((s) => s.user_id))])
   const households = [...new Set((mem ?? []).map((m) => m.household_id))]
+  // Check-ins (ADR 0005) exist whether or not anyone has push on, so also visit households with a meal today or yesterday
+  // (a day either side of UTC covers every timezone).
+  const day = (n: number) => new Date(now.getTime() + n * 86_400_000).toISOString().slice(0, 10)
+  const { data: recent } = await admin.from('planned_meals').select('household_id').is('deleted_at', null).eq('not_cooked', false)
+    .gte('date', day(-2)).lte('date', day(1))
+  const withMeals = [...new Set((recent ?? []).map((m) => m.household_id))]
+  const visit = [...new Set([...households, ...withMeals])]
 
   const report: unknown[] = []
-  for (const hid of households) {
+  for (const hid of visit) {
+    const subscribed = households.includes(hid)
     try {
+      if (!subscribed) {
+        const hh = await loadHousehold(admin, hid, now)
+        const checkins = await runCheckins(admin, hh, await loadMembers(admin, hid), now)
+        if (checkins.length) report.push({ household: hid, checkins })
+        continue
+      }
       const swept = await flushList(admin, hid)
       const hh = await loadHousehold(admin, hid, now)
       await admin.rpc('push_list_refresh', { hid, keys: hh.keys() })
@@ -37,7 +52,8 @@ Deno.serve(async (req) => {
         if (!retry) await admin.from('push_prefs').upsert({ user_id: m.user_id, expiry_checked_on: hh.today }, { onConflict: 'user_id' })
         reminders.push({ user: m.user_id, items: items.length, result, retry })
       }
-      report.push({ household: hid, swept, reminders })
+      const checkins = await runCheckins(admin, hh, await loadMembers(admin, hid), now)
+      report.push({ household: hid, swept, reminders, checkins })
     } catch (e) {
       console.error('push-cron household failed', hid, e)
       report.push({ household: hid, error: String(e) })

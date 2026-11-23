@@ -8,7 +8,7 @@ export { localDay }
 export const today = (timeZone: string): Day => localDay(new Date(), timeZone)
 
 async function fetchSettings() {
-  const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots').single()
+  const { data, error } = await supabase.from('households').select('id, timezone, expiring_days, horizon_days, slots, slot_end_times').single()
   if (error) throw error
   return data
 }
@@ -18,7 +18,7 @@ async function fetchPantry(tz: string) {
   // shortcut: fetches every row since forever; filter by the latest snapshot date when history grows
   const [batches, meals, adjustments, snapshots, ingredients] = await Promise.all([
     supabase.from('batches').select('*'),
-    supabase.from('planned_meals').select('*, recipes(id, name, recipe_ingredients(ingredient_id, qty_per_portion))'),
+    supabase.from('planned_meals').select('*, planned_meal_lines(ingredient_id, qty_total), recipes(id, name, recipe_ingredients(ingredient_id, qty_per_portion))'),
     supabase.from('adjustments').select('*'),
     supabase
       .from('snapshots')

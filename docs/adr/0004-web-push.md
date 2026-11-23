@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-11-26.
+Accepted, 2026-11-26. Extended by [0005](0005-meal-check-ins.md) (check-in pushes).
 
 ## Context
 

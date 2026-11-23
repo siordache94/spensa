@@ -105,7 +105,7 @@ Design: [ADR 0004](docs/adr/0004-web-push.md). Two kinds: a push to the other me
 3. **Deploy the functions** (not done by the GitHub integration). The `verify_jwt` settings come from `supabase/config.toml`:
 
    ```sh
-   supabase functions deploy push-test push-list push-cron --project-ref <ref>
+   supabase functions deploy push-test push-list push-cron checkin-answer --project-ref <ref>
    ```
 
 4. **Tell the database where the functions are**, once, in the SQL editor. The migration creates the trigger and the 15-minute cron job (`spensa-push-cron`, `pg_cron` + `pg_net`; check Database, Extensions if your project did not enable them), but they do nothing until this row exists:
@@ -134,6 +134,8 @@ docker exec -i supabase_db_spensa psql -U postgres -c "insert into public.push_c
 ```
 
 The service worker is build-only, so to try the real thing run `npm run build && npm run preview` (a phone needs HTTPS for push; a tunnel or the hosted deploy). Push cannot reach a phone from a local stack unless the phone can reach your laptop's functions and the push service can reach the phone, so most checking is done against the hosted project.
+
+Meal check-ins (ADR 0005) need nothing more: `push-cron` creates them, and `checkin-answer` (called by the service worker with a signed token) shares `PUSH_WEBHOOK_SECRET`. It posts to `<push_config.functions_url>/checkin-answer`; set the function secret `CHECKIN_ANSWER_URL` if phones must reach the functions at a different address than the database does (the local stack). The cron response lists the check-ins it made and the silent push it built.
 
 Try the reminder schedule by hand (`now` is accepted only with the secret):
 
