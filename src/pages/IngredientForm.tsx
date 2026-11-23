@@ -58,8 +58,9 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const inUse = usedIn.length > 0
 
   const toTaste = unit === 'to_taste'
-  const packValue = pack
-  const shelfValue = shelf
+  // optional fields: 0 means "none", the DB only accepts > 0 or null
+  const packValue = pack === 0 ? null : pack
+  const shelfValue = shelf === 0 ? null : shelf
   const minValue = min
   const packError = packValue !== null && !(packValue > 0) ? 'Must be more than 0' : undefined
   const shelfError = shelfValue !== null && !(Number.isInteger(shelfValue) && shelfValue > 0) ? 'Whole days, more than 0' : undefined
