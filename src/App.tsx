@@ -77,7 +77,7 @@ function HouseholdMenu({ household }: { household: Household }) {
       <Menu.Dropdown>
         <Group px="sm" py="xs" justify="space-between" wrap="nowrap">
           <Text size="sm">
-            Invite code: <Text component="span" ff="monospace">{household.invite_code}</Text>
+            Invite code: <Text component="span" ff="monospace" className="sp-selectable">{household.invite_code}</Text>
           </Text>
           <CopyButton value={household.invite_code}>
             {({ copied, copy }) => (
@@ -93,7 +93,7 @@ function HouseholdMenu({ household }: { household: Household }) {
           </Box>
           <Text size="xs" c="dimmed">Scan to join</Text>
           <Group gap="xs" wrap="nowrap" w="100%">
-            <Text size="xs" ff="monospace" truncate="end" style={{ flex: 1, minWidth: 0 }}>{inviteUrl}</Text>
+            <Text size="xs" ff="monospace" truncate="end" className="sp-selectable" style={{ flex: 1, minWidth: 0 }}>{inviteUrl}</Text>
             <CopyButton value={inviteUrl}>
               {({ copied, copy }) => (
                 <Button size="compact-sm" variant="light" onClick={copy}>

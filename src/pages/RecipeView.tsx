@@ -155,7 +155,7 @@ export default function RecipeView({ recipe, onClose, onEdit }: Props) {
           ))}
         </Stack>
 
-        <Text style={instructionsStyle}>{recipe.instructions || 'No instructions.'}</Text>
+        <Text className="sp-selectable" style={instructionsStyle}>{recipe.instructions || 'No instructions.'}</Text>
 
         {meals.length > 0 && (
           <Stack gap={0}>
