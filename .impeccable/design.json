@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-23T00:00:00Z",
+  "title": "Design System: Spensa",
+  "extensions": {
+    "colorMeta": {
+      "alert-yellow": { "role": "primary", "displayName": "Softened Alert Yellow", "canonical": "#f5cc3b", "tonalRamp": ["#3b3212","#796006","#aa8609","#daad0b","#f5cc3d","#f9df86","#fcf0c5","#f9f6eb"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#0b0d10", "tonalRamp": ["#22252a","#343d4c","#49566a","#5e6e88","#8695ac","#b3bdcb","#dbdfe6","#f1f2f4"] },
+      "slate-panel": { "role": "neutral", "displayName": "Slate Panel", "canonical": "#1c2127", "tonalRamp": ["#22262a","#353f4a","#4b5868","#607186","#8897aa","#b5beca","#dbe0e5","#f1f2f4"] },
+      "steel": { "role": "neutral", "displayName": "Steel", "canonical": "#6b7178", "tonalRamp": ["#252628","#3c3f43","#54595e","#6c7279","#93999f","#bcbfc3","#dfe0e2","#f2f2f3"] },
+      "board-white": { "role": "neutral", "displayName": "Board White", "canonical": "#f2f2ee", "tonalRamp": ["#292923","#484837","#65654d","#828263","#a7a78b","#c8c8b7","#e4e4dc","#f3f3f1"] },
+      "pass-paper": { "role": "neutral", "displayName": "Pass Paper (light ground)", "canonical": "#e6e8eb", "tonalRamp": ["#242629","#393e47","#4f5763","#66707f","#8e97a4","#b8bec6","#dde0e4","#f1f2f3"] },
+      "urgent-red": { "role": "tertiary", "displayName": "Urgent Red", "canonical": "#ff4d4d", "tonalRamp": ["#3d0f0f","#800000","#b20000","#e60000","#ff3333","#ff8080","#ffc2c2","#faebeb"] },
+      "pass-red": { "role": "tertiary", "displayName": "Pass Red (light)", "canonical": "#d92d2d", "tonalRamp": ["#361616","#6c1414","#971b1b","#c22323","#e05252","#eb9393","#f6cbcb","#f8eded"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page title." },
+      "brand": { "displayName": "Brand", "purpose": "Header wordmark." },
+      "body": { "displayName": "Body", "purpose": "Item and meal names." },
+      "figure": { "displayName": "Figure", "purpose": "Amounts; tabular, right-aligned; 30px in airy density." },
+      "label": { "displayName": "Label", "purpose": "Column heads, pass labels, tabs; caps tracked." },
+      "band": { "displayName": "Band", "purpose": "Category and cart bands; caps tracked." }
+    },
+    "themes": {
+      "dark": { "body": "#0b0d10", "panel": "#1c2127", "rule": "#2a2f38", "edge": "#6b7178", "text": "#f2f2ee", "text2": "#9aa0a8", "red": "#ff4d4d", "accent": "#f5cc3b", "focus": "#f5cc3b" },
+      "light": { "body": "#e6e8eb", "panel": "#ffffff", "rule": "#d3d6da", "edge": "#6b7178", "text": "#0b0d10", "text2": "#4a5058", "red": "#d92d2d", "accent": "#0b0d10", "focus": "#0b0d10" },
+      "amoled": { "body": "#000000", "panel": "#121212", "rule": "#2a2a2a", "edge": "#8a8a8a", "text": "#ffffff", "text2": "#d0d0d0", "red": "#ff4d4d", "accent": "#f5cc3b", "focus": "#f5cc3b" }
+    },
+    "density": {
+      "compact": { "row-h": "44px", "tick": "28px", "amount-size": "16px", "name-size": "16px" },
+      "airy": { "row-h": "72px", "tick": "56px", "amount-size": "30px", "name-size": "18px" }
+    },
+    "shadows": [
+      { "name": "float-dock", "value": "0 4px 14px rgba(0,0,0,0.35)", "purpose": "Trip pass and dock button only; they overlap scrolling content." }
+    ],
+    "motion": [],
+    "breakpoints": [
+      { "name": "wide", "value": "48em" },
+      { "name": "narrow-tabs", "value": "380px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button", "kind": "button", "refersTo": "button-primary",
+      "description": "Yellow fill, Ink text.",
+      "html": "<button class=\"ds-btn\">Add</button>",
+      "css": ".ds-btn{background:#f5cc3b;color:#0b0d10;font:600 16px 'Schibsted Grotesk',system-ui,sans-serif;border:0;border-radius:8px;min-height:44px;padding:0 20px;cursor:pointer}.ds-btn:hover{background:#fad557}.ds-btn:focus-visible{outline:2px solid #f5cc3b;outline-offset:2px}"
+    },
+    {
+      "name": "Default Button", "kind": "button", "refersTo": "button-default",
+      "description": "Panel fill with Steel border.",
+      "html": "<button class=\"ds-btn-2\">Edit trip</button>",
+      "css": ".ds-btn-2{background:#1c2127;color:#f2f2ee;font:600 14px 'Schibsted Grotesk',system-ui,sans-serif;border:1px solid #6b7178;border-radius:8px;min-height:44px;padding:0 16px;cursor:pointer}.ds-btn-2:hover{background:#2a2f38}.ds-btn-2:focus-visible{outline:2px solid #f5cc3b;outline-offset:2px}"
+    },
+    {
+      "name": "Board Row", "kind": "custom", "refersTo": "board-row",
+      "description": "Tick, name with note, right-aligned figure plus unit, pack hint.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-tick\"></span><span class=\"ds-name\">Milk<em>Staple, below min stock</em></span><span class=\"ds-num\">600</span><span class=\"ds-unit\">ml</span><span class=\"ds-pack\">≈ 1 pack</span></div>",
+      "css": ".ds-row{display:grid;grid-template-columns:44px minmax(0,1fr) 48px 44px 60px;align-items:center;min-height:44px;padding:0 16px 0 4px;border-bottom:1px solid #2a2f38;background:#0b0d10;color:#f2f2ee;font-family:'Schibsted Grotesk',system-ui,sans-serif}.ds-tick{width:28px;height:28px;border:2px solid #6b7178;border-radius:4px;justify-self:center}.ds-name{font-size:16px;font-weight:500;line-height:1.2;padding:6px 4px 6px 0}.ds-name em{display:block;font-style:normal;font-size:12px;color:#f5cc3b;margin-top:2px}.ds-num{text-align:right;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums lining-nums}.ds-unit{padding-left:6px;font-size:14px;color:#9aa0a8}.ds-pack{padding-left:4px;font-size:12px;color:#9aa0a8}"
+    },
+    {
+      "name": "Held Partner Row", "kind": "custom", "refersTo": "board-row-held",
+      "description": "Partner-ticked cart row stays lit until acknowledged.",
+      "html": "<div class=\"ds-held\"><span class=\"ds-tick\"></span><span class=\"ds-name\">Eggs<em>ticked by partner · just now</em></span></div>",
+      "css": ".ds-held{display:grid;grid-template-columns:44px 1fr;align-items:center;min-height:44px;padding:0 16px 0 4px;background:rgba(245,204,59,0.16);box-shadow:inset 0 0 0 1px #f5cc3b;color:#9aa0a8;font-family:'Schibsted Grotesk',system-ui,sans-serif}.ds-tick{width:28px;height:28px;background:#f5cc3b;border:2px solid #f5cc3b;border-radius:4px;justify-self:center}.ds-name{font-size:16px;font-weight:500;padding:6px 0}.ds-name em{display:block;font-style:normal;font-size:12px;color:#f5cc3b;margin-top:2px}"
+    },
+    {
+      "name": "Category Band", "kind": "custom", "refersTo": "category-band",
+      "description": "Caps band with count.",
+      "html": "<div class=\"ds-band\"><span>Produce</span><small>3 to buy</small></div>",
+      "css": ".ds-band{display:flex;justify-content:space-between;align-items:center;min-height:28px;padding:0 16px;border-bottom:1px solid #6b7178;background:#0b0d10;color:#f2f2ee;font:600 13px/1 'Barlow Semi Condensed','Arial Narrow',sans-serif;letter-spacing:.14em;text-transform:uppercase}.ds-band small{font-size:12px;letter-spacing:.1em;color:#9aa0a8}"
+    },
+    {
+      "name": "Trip Pass", "kind": "custom", "refersTo": "trip-pass",
+      "description": "Four-segment trip status pinned above the tab bar.",
+      "html": "<div class=\"ds-pass\"><div class=\"ds-c\"><b>Left</b><span>8</span></div><div class=\"ds-c\"><b>In cart</b><span>6</span></div><div class=\"ds-c ds-p\"><b>Partner</b><span>Eggs <small>just now</small></span></div><div class=\"ds-c\"><b>Queue</b><span>synced</span></div></div>",
+      "css": ".ds-pass{display:grid;grid-template-columns:.8fr .9fr 1.5fr 1fr;min-height:64px;background:#1c2127;border:1px solid #6b7178;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.35);color:#f2f2ee;font-family:'Schibsted Grotesk',system-ui,sans-serif}.ds-c{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:8px 12px;border-left:1px solid #6b7178;min-width:0}.ds-c:first-child{border-left:0}.ds-c b{font:600 11px/1 'Barlow Semi Condensed','Arial Narrow',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9aa0a8}.ds-c span{font-size:19px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums lining-nums;white-space:nowrap}.ds-c small{font-size:12px;font-weight:400;color:#9aa0a8}.ds-p span{color:#f5cc3b}"
+    },
+    {
+      "name": "Today Day Head", "kind": "custom", "refersTo": "category-band",
+      "description": "Plan day band; today gets a square marker and yellow text (dark).",
+      "html": "<div class=\"ds-day\">Mon 23 <small>today</small></div>",
+      "css": ".ds-day{display:flex;align-items:center;gap:10px;min-height:32px;padding:0 16px;background:#1c2127;border-block:1px solid #2a2f38;color:#f5cc3b;font:600 14px/1 'Barlow Semi Condensed','Arial Narrow',sans-serif;letter-spacing:.14em;text-transform:uppercase}.ds-day::before{content:'';width:8px;height:8px;background:#f5cc3b}.ds-day small{font-size:12px;letter-spacing:.1em}"
+    },
+    {
+      "name": "Cook Chip", "kind": "chip", "refersTo": "cook-chip",
+      "description": "Boxed caps label naming who cooks a meal.",
+      "html": "<span class=\"ds-cook\"><b>Cook</b> Sebastian</span>",
+      "css": ".ds-cook{display:inline-block;max-width:100%;padding:1px 6px;border:1px solid #6b7178;color:#f2f2ee;font:600 13px 'Barlow Semi Condensed','Arial Narrow',sans-serif;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-cook b{font-weight:600;text-transform:uppercase;color:#9aa0a8}"
+    },
+    {
+      "name": "Text Input", "kind": "input", "refersTo": "panel",
+      "description": "Panel fill, Steel border, yellow focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Add an item\" />",
+      "css": ".ds-input{background:#1c2127;color:#f2f2ee;border:1px solid #6b7178;border-radius:8px;min-height:44px;padding:0 12px;font:16px 'Schibsted Grotesk',system-ui,sans-serif}.ds-input:focus{outline:1px solid #f5cc3b;border-color:#f5cc3b}"
+    },
+    {
+      "name": "Offline Badge", "kind": "chip", "refersTo": "offline-badge",
+      "description": "Yellow-outline pill shown while ticks are queued.",
+      "html": "<span class=\"ds-off\">Offline</span>",
+      "css": ".ds-off{font:600 12px/1 'Barlow Semi Condensed','Arial Narrow',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#f5cc3b;border:1px solid #f5cc3b;border-radius:999px;padding:5px 9px;white-space:nowrap}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Gate Board",
+    "overview": "Spensa's shopping surface is an airport departures board with a boarding pass pinned under it. Lists are strict columns, figures are tabular, categories are banded like gate groups, and a four-cell trip pass always says where the trip stands. Panels are flat, edges are hairlines, and the checkbox is a square with a yellow fill and an ink check.\n\nBuilt for one-handed supermarket use: high contrast in every theme (light pass paper, dark ink and slate, AMOLED black), 44px targets, two densities. One softened alert yellow carries every attention meaning; red appears only for shortfall and error.",
+    "keyCharacteristics": [
+      "Flat tonal panels with 1px rules; only the floating trip pass and dock button carry a shadow.",
+      "Caps tracked Barlow Semi Condensed for structure; Schibsted Grotesk for names and numbers.",
+      "Figures right-aligned in a fixed column with unit left-aligned beside.",
+      "Yellow is a fill on light, and text too on dark and AMOLED."
+    ],
+    "rules": [
+      { "name": "The One Alert Rule", "body": "Yellow means attention or active and nothing else. Never a second accent hue; red is reserved for shortfall and error.", "section": "colors" },
+      { "name": "The Fill-Only On Paper Rule", "body": "On the light theme yellow is a fill behind Ink, never a text or outline colour.", "section": "colors" },
+      { "name": "The Ink On Yellow Rule", "body": "Any yellow surface carries Ink text, in every theme.", "section": "colors" },
+      { "name": "The Caps Are Structure Rule", "body": "Tracked caps Barlow marks structure; names and amounts are never set in caps.", "section": "typography" },
+      { "name": "The Figure Column Rule", "body": "Numbers that line up are tabular and right-aligned in their own column; the unit sits left-aligned in the next.", "section": "typography" },
+      { "name": "The Flat Board Rule", "body": "Rows, bands, panels and cards carry no shadow. Only an element that floats above scrolling content may.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do align every figure to the shared board grid and use tabular numerals only in figure columns.",
+      "Do put yellow behind Ink text, and use --sp-accent where yellow-on-dark must become Ink-on-light.",
+      "Do keep rows at least 44px (compact) and size ticks and amounts from the density variables, never hard-coded.",
+      "Do use hairline rules and panel-versus-ground contrast for separation.",
+      "Do make state legible without colour alone: the held row carries a text note, the partner cell carries a name, the offline badge carries a word."
+    ],
+    "donts": [
+      "Don't use soft white cards with rounded checkboxes or a green success colour; the world rejects the category default.",
+      "Don't add a second accent hue; red is only for shortfall and error.",
+      "Don't put yellow text or outlines on the light theme.",
+      "Don't add shadows to rows, bands or panels; only floating dock elements have one.",
+      "Don't set names or amounts in caps, or labels in the grotesk.",
+      "Don't use dot markers or glyph icons for status; markers are small hard squares and words."
+    ]
+  }
+}
