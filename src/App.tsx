@@ -1,5 +1,11 @@
-import { AppShell, Button, Group, Stack, Title } from '@mantine/core'
+import { useEffect, useState } from 'react'
+import { AppShell, Alert, Button, Center, CopyButton, Group, Loader, Menu, Stack, Text, Title } from '@mantine/core'
 import { NavLink, Route, Routes } from 'react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Session } from '@supabase/supabase-js'
+import { supabase } from './lib/supabase.ts'
+import AuthPage from './pages/AuthPage.tsx'
+import HouseholdPage from './pages/HouseholdPage.tsx'
 import PlanPage from './pages/PlanPage.tsx'
 import RecipesPage from './pages/RecipesPage.tsx'
 import PantryPage from './pages/PantryPage.tsx'
@@ -31,7 +37,48 @@ function NavButton({ to, label, end, fullWidth }: (typeof navItems)[number] & { 
   )
 }
 
-function App() {
+type Household = { id: string; name: string; invite_code: string }
+
+async function fetchHousehold(): Promise<Household | null> {
+  const { data, error } = await supabase.from('households').select('id, name, invite_code').maybeSingle()
+  if (error) throw error
+  return data
+}
+
+function HouseholdMenu({ household }: { household: Household }) {
+  const queryClient = useQueryClient()
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    queryClient.clear()
+  }
+
+  return (
+    <Menu position="bottom-end" width={260} shadow="md">
+      <Menu.Target>
+        <Button variant="subtle">{household.name}</Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Group px="sm" py="xs" justify="space-between" wrap="nowrap">
+          <Text size="sm">
+            Invite code: <Text component="span" ff="monospace">{household.invite_code}</Text>
+          </Text>
+          <CopyButton value={household.invite_code}>
+            {({ copied, copy }) => (
+              <Button size="compact-sm" variant="light" onClick={copy}>
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            )}
+          </CopyButton>
+        </Group>
+        <Menu.Divider />
+        <Menu.Item onClick={signOut}>Sign out</Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  )
+}
+
+function Shell({ household }: { household: Household }) {
   return (
     <AppShell
       header={{ height: 56 }}
@@ -40,8 +87,9 @@ function App() {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md">
+        <Group h="100%" px="md" justify="space-between">
           <Title order={3}>Spensa</Title>
+          <HouseholdMenu household={household} />
         </Group>
       </AppShell.Header>
 
@@ -72,6 +120,30 @@ function App() {
       </AppShell.Footer>
     </AppShell>
   )
+}
+
+function SignedIn() {
+  const { data: household, isPending, error } = useQuery({ queryKey: ['household'], queryFn: fetchHousehold })
+
+  if (isPending) return <Center h="100vh"><Loader /></Center>
+  if (error) return <Alert color="red" m="md">{error.message}</Alert>
+  if (!household) return <HouseholdPage />
+  return <Shell household={household} />
+}
+
+function App() {
+  // undefined = session not yet known
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  if (session === undefined) return <Center h="100vh"><Loader /></Center>
+  if (!session) return <AuthPage />
+  return <SignedIn />
 }
 
 export default App
