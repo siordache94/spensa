@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check:functions": "cd supabase/functions && DENO_NO_PACKAGE_JSON=1 deno check --node-modules-dir=auto */index.ts",
-    "db:types": "supabase gen types typescript --local > src/lib/database.types.ts"
+    "db:types": "supabase gen types typescript --local > src/lib/database.types.ts",
+    "deploy:supabase": "bash scripts/deploy-supabase.sh",
+    "deploy:supabase:db": "bash scripts/deploy-supabase.sh db",
+    "deploy:supabase:functions": "bash scripts/deploy-supabase.sh functions"
   },
   "dependencies": {
     "@mantine/core": "^9.8.2",
