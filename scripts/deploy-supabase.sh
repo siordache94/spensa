@@ -103,7 +103,26 @@ if [ "$dry_run" -eq 0 ] && [ "$assume_yes" -eq 0 ]; then
   esac
 fi
 
-# A pooler URI is the fallback for IPv4-only networks (the direct host is IPv6-only).
+# A pooler URI is the fallback for IPv4-only networks (the direct host is IPv6-only). When only the token and
+# database password are present, ask the Management API for the pooler host and build the Session-mode URL.
+build_pooler_url() {
+  [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ -n "${SUPABASE_DB_PASSWORD:-}" ] || return 1
+  local body host user name pw
+  body="$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    "https://api.supabase.com/v1/projects/$ref/config/database/pooler" 2>/dev/null)" || return 1
+  host="$(printf '%s' "$body" | sed -n 's/.*"db_host"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  user="$(printf '%s' "$body" | sed -n 's/.*"db_user"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  name="$(printf '%s' "$body" | sed -n 's/.*"db_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  [ -n "$host" ] && [ -n "$user" ] || return 1
+  pw="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$SUPABASE_DB_PASSWORD" 2>/dev/null || printf '%s' "$SUPABASE_DB_PASSWORD")"
+  SUPABASE_DB_URL="postgresql://$user:$pw@$host:5432/${name:-postgres}"
+  echo "Using the Session pooler at $host:5432 for IPv4."
+}
+
+if [ -z "${SUPABASE_DB_URL:-}" ]; then
+  build_pooler_url || true
+fi
+
 db_cmd=(supabase db push --remote="${SUPABASE_DB_URL:-$ref}")
 if [ -z "${SUPABASE_DB_URL:-}" ] && [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
   db_cmd+=(--password "$SUPABASE_DB_PASSWORD")
@@ -124,8 +143,10 @@ run_db_push() {
       *IPv6*)
         echo >&2
         echo "This network has no IPv6 and the direct database host is IPv6-only." >&2
-        echo "Copy the Session pooler URI from Dashboard > Connect and rerun:" >&2
-        echo "  SUPABASE_DB_URL='postgresql://...' npm run deploy:supabase" >&2
+        echo "Add the database password to .env.deploy and the script builds the Session pooler URL:" >&2
+        echo "  echo 'SUPABASE_DB_PASSWORD=...' >> .env.deploy" >&2
+        echo "  npm run deploy:supabase" >&2
+        echo "  # or paste the dashboard's Session pooler URI as SUPABASE_DB_URL" >&2
         ;;
     esac
     return "$status"
