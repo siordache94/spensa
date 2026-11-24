@@ -1,7 +1,8 @@
 // Called by the database (pg_net, trigger on household_events) after a household write.
 // If the write changed the to-buy list it opens a 30-second window; when the window ends the combined change
 // is pushed to the other member(s). Design and trade-offs: docs/adr/0004-web-push.md.
-import { adminClient, hasWebhookSecret, reply } from '../_shared/push.ts'
+import { adminClient, hasWebhookSecret } from '../_shared/push.ts'
+import { reply } from '../_shared/http.ts'
 import { loadHousehold } from '../_shared/push.ts'
 import { flushList } from '../_shared/list.ts'
 import { LIST_WINDOW_SECONDS } from '../../../src/lib/notify.ts'

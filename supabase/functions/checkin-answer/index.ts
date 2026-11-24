@@ -1,7 +1,8 @@
 // "Cooked as planned" tapped on a check-in notification: answers with the signed token that came in the push
 // (src/lib/checkinToken.ts), so the service worker needs no session. It can only answer 'planned', for the person
 // the token was issued to, on one meal, and only while the token lives. Replies with the household's unread count.
-import { adminClient, cors, reply } from '../_shared/push.ts'
+import { adminClient } from '../_shared/push.ts'
+import { cors, reply } from '../_shared/http.ts'
 import { verifyCheckinToken } from '../../../src/lib/checkinToken.ts'
 
 Deno.serve(async (req) => {

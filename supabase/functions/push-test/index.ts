@@ -1,5 +1,6 @@
 // "Send me a test notification" in Settings: pushes to the caller's own devices only.
-import { adminClient, cors, reply, sendPush } from '../_shared/push.ts'
+import { adminClient, sendPush } from '../_shared/push.ts'
+import { cors, reply } from '../_shared/http.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

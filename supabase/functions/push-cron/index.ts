@@ -2,7 +2,8 @@
 //   1. sends list-change windows older than 30 s that push-list's own timer did not get to,
 //   2. refreshes the to-buy baseline (time moves the list too),
 //   3. sends each member's daily expiry reminder when their chosen time has come.
-import { adminClient, hasWebhookSecret, loadHousehold, loadMembers, reply, sendPush } from '../_shared/push.ts'
+import { adminClient, hasWebhookSecret, loadHousehold, loadMembers, sendPush } from '../_shared/push.ts'
+import { reply } from '../_shared/http.ts'
 import { runCheckins } from '../_shared/checkin.ts'
 import { flushList } from '../_shared/list.ts'
 import { expiringForReminder, expiryPush, reminderDue } from '../../../src/lib/notify.ts'
