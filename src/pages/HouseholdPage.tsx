@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Alert, Button, Center, Stack, TextInput } from '@mantine/core'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCommand } from '../lib/api/command.ts'
 import { signOut, useAuthSession } from '../lib/api/auth.ts'
 import { createHousehold, joinHousehold } from '../lib/api/household.ts'
+import { clearLocalData } from '../lib/localData.ts'
 import './lists.css'
 
 export default function HouseholdPage() {
+  const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
   const [yourName, setYourName] = useState('')
@@ -32,14 +35,13 @@ export default function HouseholdPage() {
   const onDone = () => window.history.replaceState(null, '', window.location.pathname)
   const create = useCommand(createHousehold, { onSuccess: onDone, onError: onFailure })
   const join = useCommand(joinHousehold, { onSuccess: onDone, onError: onFailure })
-  const leave = useCommand(signOut)
-  const busy = create.isPending || join.isPending
+  const leave = useCommand(signOut, { onSuccess: () => clearLocalData(queryClient) })
 
   return (
     <Center mih="100vh" p="md">
       <Stack w="100%" maw={380}>
         <Stack gap={4}>
-          <h2 className="sp-title">Set up your household</h2>
+          <h1 className="sp-title">Set up your household</h1>
           <p className="sp-dim">Create one for your home, or join your partner's with their invite code.</p>
         </Stack>
 
@@ -58,7 +60,7 @@ export default function HouseholdPage() {
             <Stack>
               <h3 className="sp-lhead">Create a household</h3>
               <TextInput label="Household name" placeholder="e.g. Casa Rossi" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-              <Button type="submit" loading={busy} disabled={!name.trim()}>Create household</Button>
+              <Button type="submit" loading={create.isPending} disabled={!name.trim()}>Create household</Button>
             </Stack>
           </form>
         </div>
@@ -69,11 +71,11 @@ export default function HouseholdPage() {
               <h3 className="sp-lhead">Join a household</h3>
               <TextInput
                 label="Invite code"
-                description="Ask your partner: it's in their household menu, or scan their QR code."
+                description="Ask your partner: it's in their household menu, or scan it with your phone camera."
                 value={code}
                 onChange={(e) => setCode(e.currentTarget.value)}
               />
-              <Button type="submit" loading={busy} disabled={!code.trim()}>Join household</Button>
+              <Button type="submit" loading={join.isPending} disabled={!code.trim()}>Join household</Button>
             </Stack>
           </form>
         </div>

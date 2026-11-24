@@ -111,17 +111,23 @@ export const packLabel = (packs: number | null) => (packs ? `≈ ${packs} ${pack
 /** Rows grouped by aisle: STORE_WALK order, then other named categories A-Z, then uncategorised (and "other") last. */
 export function groupByAisle(entries: Entry[]): [string | null, Entry[]][] {
   const byCategory = new Map<string | null, Entry[]>()
+  // Categories are free text: "Produce" and "produce" are one aisle, labelled by the first spelling seen.
+  const label = new Map<string, string>()
   for (const e of entries) {
+    const category = e.category?.trim() ?? ''
     // a real "other" category and uncategorised items share the one closing group
-    const key = e.category === null || e.category.toLowerCase() === 'other' ? null : e.category
+    const key = category === '' || category.toLowerCase() === 'other' ? null : category.toLowerCase()
+    if (key !== null && !label.has(key)) label.set(key, category)
     byCategory.set(key, [...(byCategory.get(key) ?? []), e])
   }
-  const walk = (c: string) => STORE_WALK.indexOf(c.toLowerCase())
+  const walk = (c: string) => STORE_WALK.indexOf(c)
   const known = (c: string) => (walk(c) === -1 ? STORE_WALK.length : walk(c))
-  const named = [...byCategory.entries()].filter(([c]) => c !== null) as [string, Entry[]][]
-  named.sort(([a], [b]) => known(a) - known(b) || a.localeCompare(b))
+  const named = [...byCategory.keys()]
+    .filter((c): c is string => c !== null)
+    .sort((a, b) => known(a) - known(b) || label.get(a)!.localeCompare(label.get(b)!))
+    .map((key) => [label.get(key)!, byCategory.get(key)!] as [string, Entry[]])
   const other = byCategory.get(null)
-  return [...named, ...(other ? [[null, other] as [null, Entry[]]] : [])] as [string | null, Entry[]][]
+  return [...named, ...(other ? [[null, other] as [null, Entry[]]] : [])]
 }
 
 /**

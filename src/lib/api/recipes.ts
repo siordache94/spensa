@@ -52,7 +52,7 @@ export const deleteRecipe = defineCommand<{ id: string }>({
   invalidates: () => [keys.recipes.all()],
 })
 
-/** Undo of deleteRecipe. Not used by a page yet. */
+/** Undo of deleteRecipe, for the Recipes list's Undo toast. */
 export const restoreRecipe = defineCommand<{ id: string }>({
   name: 'recipes.restore',
   run: (api, { id }) => api.trash.restore('recipes', [id]),

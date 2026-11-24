@@ -9,7 +9,17 @@
 }
 /* light: a yellow fill with Ink text, not yellow text or an outline on paper */
 :root[data-spensa-theme='light'] .sp-offline { background: var(--sp-yellow); border-color: var(--sp-yellow); color: var(--sp-ink); }
-.sp-hh { color: var(--sp-text); font-weight: 600; min-height: 44px; }
+/* Tight inline padding: the gear beside it must fit the header at 320px with a queue badge and a long name. */
+.sp-hh { color: var(--sp-text); font-weight: 600; min-height: 44px; min-width: 0; padding-inline: 8px; }
+.sp-header-actions { min-width: 0; }
+/* A long household name truncates instead of widening the header at 320px. */
+.sp-hh-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The invite link gets its own full-width line and wraps: a truncated "http://l..." cannot be typed or shared. */
+.sp-invite-url { line-height: 1.4; word-break: break-all; }
+/* The header row keeps the brand and queue badge whole; the household name gives up the width. */
+.sp-header-row { min-width: 0; }
+.sp-brand-group { flex: 0 0 auto; }
+.sp-offline-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-nav { background: var(--sp-panel); border-top: 1px solid var(--sp-edge); padding-bottom: env(safe-area-inset-bottom, 0px); padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px); }
 .sp-tabs { display: grid; grid-template-columns: repeat(5, 1fr); height: 100%; }
 .sp-tab {
@@ -18,6 +28,13 @@
   font: 600 12px/1 var(--sp-label); letter-spacing: 0.06em; text-transform: uppercase;
 }
 @media (max-width: 380px) { .sp-tab { font-size: 12px; letter-spacing: 0.02em; } }
+/* Five cells at 320px are 64px: INGREDIENTS cannot fit, so the tab shows its short label (aria-label keeps the full name). */
+.sp-tab-long, .sp-tab-short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-tab-short { display: none; }
+@media (max-width: 340px) {
+  .sp-tab-long { display: none; }
+  .sp-tab-short { display: block; }
+}
 .sp-tab[aria-current='page'] { color: var(--sp-accent); box-shadow: inset 0 -3px 0 var(--sp-yellow); }
 :root[data-spensa-theme='light'] .sp-tab[aria-current='page'] { color: var(--sp-ink); }
 .sp-side { background: var(--sp-panel); border-right: 1px solid var(--sp-edge); padding: 8px 0; }

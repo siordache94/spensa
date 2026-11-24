@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { round1, round3 } from './format.ts'
+import { formatDay, formatQuantity, round1, round3, visibleUnit } from './format.ts'
 
 describe('round1 / round3', () => {
   it('rounds to one and three decimals', () => {
@@ -30,5 +30,38 @@ describe('round1 / round3', () => {
   it('rounds the whole quantity unit to the nearest step', () => {
     expect(round1(0.04)).toBe(0)
     expect(round1(0.05)).toBe(0.1)
+  })
+})
+
+describe('formatDay', () => {
+  it('renders the short date the list rows share', () => {
+    expect(formatDay('2026-11-23')).toBe('23 Nov')
+  })
+
+  it('uses the same locale whatever the device locale', () => {
+    expect(formatDay('2026-11-23', { day: 'numeric', month: 'short', year: 'numeric' })).toBe('23 Nov 2026')
+    expect(formatDay('2026-11-23', { weekday: 'short', day: 'numeric', month: 'short' })).toBe('Mon 23 Nov')
+  })
+
+  it('keeps a calendar day on its UTC day', () => {
+    expect(formatDay('2026-01-01')).toBe('1 Jan')
+  })
+})
+
+describe('visibleUnit / formatQuantity', () => {
+  it('never shows count as a unit', () => {
+    expect(visibleUnit('count')).toBe('')
+    expect(formatQuantity(4, 'count')).toBe('4')
+  })
+
+  it('keeps the metric units and drops the to-taste unit word', () => {
+    expect(visibleUnit('g')).toBe('g')
+    expect(formatQuantity(300, 'g')).toBe('300 g')
+    expect(visibleUnit('to_taste')).toBe('')
+  })
+
+  it('has no unit when there is none', () => {
+    expect(visibleUnit(undefined)).toBe('')
+    expect(formatQuantity(2)).toBe('2')
   })
 })

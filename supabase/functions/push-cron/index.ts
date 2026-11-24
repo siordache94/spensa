@@ -39,10 +39,11 @@ Deno.serve(async (req) => {
       }
       const swept = await flushList(admin, hid)
       const hh = await loadHousehold(admin, hid, now)
+      const members = await loadMembers(admin, hid)
       await admin.rpc('push_list_refresh', { hid, keys: hh.keys() })
 
       const reminders: unknown[] = []
-      for (const m of await loadMembers(admin, hid)) {
+      for (const m of members) {
         if (!reminderDue(now, hh.tz, m.expiry_time, m.expiry_checked_on)) continue
         const items = expiringForReminder(hh.events, hh.remaining(), hh.names, hh.today, hh.reminderDays)
         const push = expiryPush(items, hh.today)
@@ -52,7 +53,7 @@ Deno.serve(async (req) => {
         if (!retry) await admin.from('push_prefs').upsert({ user_id: m.user_id, expiry_checked_on: hh.today }, { onConflict: 'user_id' })
         reminders.push({ user: m.user_id, items: items.length, result, retry })
       }
-      const checkins = await runCheckins(admin, hh, await loadMembers(admin, hid), now)
+      const checkins = await runCheckins(admin, hh, members, now)
       report.push({ household: hid, swept, reminders, checkins })
     } catch (e) {
       console.error('push-cron household failed', hid, e)

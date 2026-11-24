@@ -37,3 +37,10 @@ export const deleteMeal = defineCommand<{ id: string }>({
   run: (api, { id }) => api.trash.softDelete('planned_meals', [id]),
   invalidates: refreshPlanner,
 })
+
+/** Undo of deleteMeal: restores that one planned meal (ADR 0003). */
+export const restoreMeal = defineCommand<{ id: string }>({
+  name: 'plan.restore',
+  run: (api, { id }) => api.trash.restore('planned_meals', [id]),
+  invalidates: refreshPlanner,
+})

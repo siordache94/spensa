@@ -5,6 +5,8 @@ import { changeMessage, diffToBuy } from './trip.ts'
 
 export const LIST_WINDOW_SECONDS = 30
 export const REMINDER_GRACE_MINUTES = 180
+/** The push cron ticks every 15 minutes (`spensa-push-cron`), the last one before midnight at 23:45. */
+export const REMINDER_TICK_MINUTES = 15
 
 export type PushAction = { action: string; title: string }
 export type PushPayload = {
@@ -59,13 +61,20 @@ export function localClock(now: Date, timeZone: string): { day: Day; minutes: nu
  * Is this person's daily reminder due? Their chosen time is wall-clock in the household timezone, so it
  * follows DST. Due from that time until `graceMinutes` later (so a late tick still sends, but turning the
  * reminder on at 14:00 for 09:00 does not fire at once), and only once per local day.
+ *
+ * A time in the last tick of the day (23:46-23:59) has no tick left before midnight, so its window wraps
+ * over and the 00:00 tick still sends it. Earlier evening times fired on their own day, and wrapping their
+ * full 3-hour grace would send a second reminder at midnight. `expiry_checked_on` is the local day the
+ * reminder was handled, so a reminder sent at 00:00 records the new day and does not repeat at 00:15.
  */
 export function reminderDue(now: Date, timeZone: string, time: string | null, checkedOn: Day | null, graceMinutes = REMINDER_GRACE_MINUTES): boolean {
   if (!time) return false
   const { day, minutes } = localClock(now, timeZone)
   if (checkedOn === day) return false
   const at = minutesOfDay(time)
-  return minutes >= at && minutes < at + graceMinutes
+  if (minutes >= at && minutes < at + graceMinutes) return true
+  const dayMinutes = 24 * 60
+  return at + REMINDER_TICK_MINUTES > dayMinutes && minutes + dayMinutes < at + graceMinutes
 }
 
 /** "today", "tomorrow", "in 2 days". */

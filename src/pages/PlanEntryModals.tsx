@@ -3,12 +3,15 @@ import { Alert, Button, Input, Loader, Radio, SegmentedControl, Select, Stack, T
 import { DatePickerInput } from '@mantine/dates'
 import { useMediaQuery } from '@mantine/hooks'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
+import { EmptyState } from '../components/EmptyState.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { notifications } from '@mantine/notifications'
 import { useCommand } from '../lib/api/command.ts'
 import { addMeal, moveMeal, setMealCook, setMealPortions } from '../lib/api/plan.ts'
 import { useRecipeOptions } from '../lib/api/recipes.ts'
 import { memberLabel, saveSlots, useMembers } from '../lib/api/household.ts'
+import { slotLabel } from '../lib/checkin.ts'
+import { formatDay } from '../lib/format.ts'
 
 /** Reports a failed planner write. Every planner write uses it as its onError. */
 export const notifyFailure = (e: Error) => notifications.show({ color: 'red', title: 'Could not save', message: e.message })
@@ -46,35 +49,45 @@ export function MealModal({
   }
 
   return (
-    <GuardedModal dirty={dirty} onClose={onClose} title={meal ? 'Change portions' : `Add to ${target.slot}, ${target.date}`} fullScreen={isMobile}>
+    <GuardedModal dirty={dirty} onClose={onClose} title={meal ? 'Change portions' : `Add to ${slotLabel(target.slot)}, ${formatDay(target.date, { weekday: 'short', day: 'numeric', month: 'short' })}`} fullScreen={isMobile}>
       <Stack>
         {recipes.error && <Alert color="red">{recipes.error.message}</Alert>}
-        {!meal &&
-          (recipes.isPending ? (
-            <Loader />
-          ) : (
-            <Select
-              label="Recipe"
-              searchable
-              data={recipes.data?.map((r) => ({ value: r.id, label: r.name })) ?? []}
-              value={recipeId}
-              onChange={(id) => {
-                setRecipeId(id)
-                const serves = recipes.data?.find((r) => r.id === id)?.serves
-                if (serves) setPortions(serves)
-              }}
+        {!meal && recipes.data?.length === 0 ? (
+          <EmptyState
+            title="No recipes yet"
+            reason="Add one to plan a meal."
+            action={{ label: 'Add recipe', to: '/recipes' }}
+          />
+        ) : (
+          <>
+            {!meal &&
+              (recipes.isPending ? (
+                <Loader />
+              ) : (
+                <Select
+                  label="Recipe"
+                  searchable
+                  data={recipes.data?.map((r) => ({ value: r.id, label: r.name })) ?? []}
+                  value={recipeId}
+                  onChange={(id) => {
+                    setRecipeId(id)
+                    const serves = recipes.data?.find((r) => r.id === id)?.serves
+                    if (serves) setPortions(serves)
+                  }}
+                />
+              ))}
+            <Stepper
+              label="Portions"
+              min={1}
+              step={1}
+              allowDecimal={false}
+              value={portions}
+              onChange={setPortions}
+              error={isPortions(portions) ? undefined : 'Whole number, 1 or more'}
             />
-          ))}
-        <Stepper
-          label="Portions"
-          min={1}
-          step={1}
-          allowDecimal={false}
-          value={portions}
-          onChange={setPortions}
-          error={isPortions(portions) ? undefined : 'Whole number, 1 or more'}
-        />
-        <Button disabled={!canSave} loading={add.isPending || changePortions.isPending} onClick={save}>Save</Button>
+            <Button disabled={!canSave} loading={add.isPending || changePortions.isPending} onClick={save}>Save</Button>
+          </>
+        )}
       </Stack>
     </GuardedModal>
   )

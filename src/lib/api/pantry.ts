@@ -23,7 +23,8 @@ export async function fetchPantry(api: DataPort, tz: string, slots: string[] | u
   const domainIngredients = buildIngredients(rows.ingredients)
   // Who bought each batch (null = unknown), kept beside the domain events: the replay doesn't need it.
   const batchAuthors: Record<string, string | null> = Object.fromEntries(rows.batches.map((b) => [b.id, b.created_by]))
-  return { events, domainIngredients, ingredients: rows.ingredients, meals: rows.meals, batchAuthors }
+  // The household version these facts were read at: "Done shopping" sends it back so a stale snapshot is refused.
+  return { events, domainIngredients, ingredients: rows.ingredients, meals: rows.meals, batchAuthors, version: rows.version }
 }
 
 /** Raw facts for the Planner, Pantry and Shopping tabs. Derive stock with replay()/shoppingList() in a useMemo. */
@@ -44,6 +45,8 @@ export function usePantry() {
     domainIngredients: pantry.data?.domainIngredients,
     meals: pantry.data?.meals,
     batchAuthors: pantry.data?.batchAuthors,
+    /** household_events.at when the facts were read (undefined while the household has no event row yet). */
+    version: pantry.data?.version,
   }
 }
 

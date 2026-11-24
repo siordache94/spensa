@@ -18,14 +18,19 @@
 .sp-slotname { padding-top: 15px; font: 600 12px/1 var(--sp-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sp-text2); }
 .sp-slotmeals { display: flex; flex-direction: column; min-width: 0; }
 .sp-mealrow {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 44px; padding: 8px 4px 8px 0;
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 44px; padding: 8px 24px 8px 0;
   background: none; border: 0; border-top: 1px solid var(--sp-rule); color: var(--sp-text); font: inherit; text-align: left; cursor: pointer; width: 100%;
 }
 .sp-mealrow:first-child { border-top: 0; }
 .sp-mealname { font-size: 16px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
 .sp-cook b { font-weight: 600; text-transform: uppercase; color: var(--sp-text2); }
+.sp-cook-ini { display: none; }
+/* The menu's persistent affordance: the row is still one tap target, the kebab just says a menu is there. */
+.sp-mealkebab { position: absolute; top: 8px; right: 0; display: inline-flex; color: var(--sp-text2); pointer-events: none; }
+.sp-draghint { display: none; }
+.sp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .sp-mark { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.25; color: var(--sp-text); }
-.sp-short::before { content: ''; width: 6px; height: 6px; background: var(--sp-red); flex: none; }
 .sp-exp { border: 1px solid var(--sp-yellow); padding: 1px 6px; }
 /* a yellow hairline on white is ~1.5:1, so light uses the fill like the today band */
 :root[data-spensa-theme='light'] .sp-exp { background: var(--sp-yellow); border-color: var(--sp-yellow); color: var(--sp-ink); }
@@ -77,11 +82,20 @@
   .sp-slotname { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
   .sp-slotmeals { gap: 4px; }
   .sp-mealrow, .sp-mealrow:first-child {
-    min-height: 44px; padding: 6px 8px; gap: 3px; background: var(--sp-body); border: 1px solid var(--sp-rule);
+    min-height: 44px; padding: 6px 26px 6px 8px; gap: 3px; background: var(--sp-body); border: 1px solid var(--sp-rule);
   }
   .sp-mealrow:hover { border-color: var(--sp-edge); }
   .sp-mealname { font-size: 14px; line-height: 1.2; }
   .sp-cook { font-size: 12px; overflow-wrap: anywhere; }
+  .sp-mealkebab { top: 6px; right: 2px; }
+  /* Drag is pointer-only and lives on the desktop planner: say so on hover or keyboard focus, not in a title. */
+  .sp-draghint {
+    position: absolute; inset-inline: 4px; bottom: 2px; display: none; pointer-events: none;
+    font: 600 10px/1.2 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2);
+    background: var(--sp-body);
+  }
+  @media (hover: hover) { .sp-mealrow:hover .sp-draghint { display: block; } }
+  .sp-mealrow:focus-visible .sp-draghint { display: block; }
   .sp-mark { font-size: 12px; }
   /* pinned to the cell bottom so the + sits on one line across the row */
   .sp-addmeal { width: 100%; height: 44px; margin-top: auto; }
@@ -92,6 +106,9 @@
 @media (min-width: 64em) and (max-width: 79.99em) {
   .sp-dayhead { letter-spacing: 0.08em; font-size: 12px; }
   .sp-dayhead small { display: none; }
+  /* A full cook name truncates in a ~100px day column: initials stay identifiable. */
+  .sp-cook-name { display: none; }
+  .sp-cook-ini { display: inline; }
 }
 
 /* Meal check-ins (ADR 0005): "didn't cook" is struck through with a caps label; "to confirm" is a yellow square. */

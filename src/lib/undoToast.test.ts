@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { notBoughtLine, undoMessage } from './UndoToast.tsx'
+import { notBoughtLine, undoMessage } from './undoToast.ts'
 
 describe('undoMessage', () => {
   it('says bought for purchases and to-taste rows, checked for free-text items', () => {

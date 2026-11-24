@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { Alert, Anchor, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCommand } from '../lib/api/command.ts'
-import { exportMyData, useDeleteAccount } from '../lib/api/account.ts'
+import { useApi } from '../lib/api/context.tsx'
+import { useModalOverlay } from '../lib/navigation.ts'
+import { deleteAccount, exportMyData } from '../lib/api/account.ts'
+import { clearLocalData } from '../lib/localData.ts'
 import './lists.css'
 
 const CONFIRM_WORD = 'DELETE'
-// Deployers point this at their own filled-in notice (see PRIVACY.md).
-const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || 'https://github.com/siordache94/spensa/blob/main/PRIVACY.md'
+// Deployers point this at their own filled-in notice (see PRIVACY.md). The Auth page links it before sign-up too.
+// oxlint-disable-next-line react/only-export-components -- the Auth page shares this one constant (MR-039)
+export const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || 'https://github.com/siordache94/spensa/blob/main/PRIVACY.md'
 
 function download(data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -38,11 +43,21 @@ function ExportData() {
 }
 
 function DeleteAccount() {
+  const api = useApi()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const del = useDeleteAccount({ onError: () => setError('Could not delete your account. Nothing was lost; try again.') })
+  // The account is already gone on the server, so the device teardown is explicit: cache, saved copy and trust record.
+  const del = useCommand(deleteAccount, {
+    onSuccess: () => {
+      clearLocalData(queryClient)
+      void api.auth.signOut('local')
+    },
+    onError: () => setError('Could not delete your account. Nothing was lost; try again.'),
+  })
   const busy = del.isPending
+  const close = useModalOverlay(() => { if (!busy) setOpen(false) }, open)
 
   function purge() {
     setError(null)
@@ -57,7 +72,7 @@ function DeleteAccount() {
         household keeps its data and your name is removed from it. This cannot be undone.
       </p>
       <Button color="red" variant="outline" onClick={() => { setTyped(''); setError(null); setOpen(true) }}>Delete my account</Button>
-      <Modal opened={open} onClose={() => !busy && setOpen(false)} title="Delete your account?" centered>
+      <Modal opened={open} onClose={close} title="Delete your account?" centered>
         <form onSubmit={(e) => { e.preventDefault(); if (typed === CONFIRM_WORD) purge() }}>
           <Stack>
             <Alert color="red">This is permanent. There is no way to get your account or its data back.</Alert>
@@ -69,7 +84,7 @@ function DeleteAccount() {
               onChange={(e) => setTyped(e.currentTarget.value)}
             />
             <Group justify="flex-end">
-              <Button variant="default" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="default" disabled={busy} onClick={close}>Cancel</Button>
               <Button type="submit" color="red" loading={busy} disabled={typed !== CONFIRM_WORD}>Delete forever</Button>
             </Group>
           </Stack>

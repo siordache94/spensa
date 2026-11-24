@@ -6,11 +6,15 @@ describe('shouldPersistQuery', () => {
     expect(shouldPersistQuery({ queryKey: keys.auth.session() })).toBe(false)
   })
 
-  it('persists every other query, including the auth uid and queries under the same prefix', () => {
-    expect(shouldPersistQuery({ queryKey: keys.auth.uid() })).toBe(true)
+  it('does not persist the user id, so a sign-out cannot leave it behind', () => {
+    expect(shouldPersistQuery({ queryKey: keys.auth.uid() })).toBe(false)
+  })
+
+  it('persists every other query, including queries under the same prefixes', () => {
     expect(shouldPersistQuery({ queryKey: keys.household.all() })).toBe(true)
     expect(shouldPersistQuery({ queryKey: keys.push.prefs('u1') })).toBe(true)
     expect(shouldPersistQuery({ queryKey: ['auth', 'session', 'extra'] })).toBe(true)
+    expect(shouldPersistQuery({ queryKey: ['auth', 'uid', 'extra'] })).toBe(true)
     expect(shouldPersistQuery({ queryKey: ['auth'] })).toBe(true)
   })
 })

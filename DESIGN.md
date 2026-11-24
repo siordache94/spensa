@@ -188,9 +188,9 @@ A near-monochrome ink, slate and steel palette with a single yellow. Values belo
 
 ## Layout
 
-Mobile first, one column. The shop list is full-bleed: rows and bands run edge to edge (negative margin cancels the page gutter) with 16px inner padding. A single shared grid (`--cols`) aligns column heads, category bands and rows: tick cell (tick size + 16px), flexible name, amount (3x the amount font size), unit (44px), pack (60px). Trip setup meal rows use a three-column grid (tick, 64px slot, name). Plan days are full-bleed panels capped at 720px, each slot row a 64px / flexible / 44px grid.
+Mobile first, one column. The shop list is full-bleed: rows and bands run edge to edge (negative margin cancels the page gutter) with 16px inner padding. A single shared grid (`--cols`) aligns column heads, category bands and rows: tick cell (tick size + 16px), flexible name, amount (3x the amount font size), unit (52px) and a 44px pencil. Pack hints are not a column: they are a 12px sub-line under the name, in secondary grey, so a long pack estimate never pushes the figure out of line. Trip setup meal rows use a three-column grid (tick, 64px slot, name). Plan days are full-bleed panels capped at 720px, each slot row a 64px / flexible / 44px grid.
 
-Density is a root setting: compact (row 44px, tick 28px, amount 16px, name 16px) or airy (row 72px, tick 56px, amount 30px, name 18px, unit 16px, pack 13px). Spacing is a loose 4/8/12/16/24 rhythm; bands add 12px above. The list reserves 150px bottom padding (100px wide) for the pinned dock.
+Density is a root setting: compact (row 44px, tick 28px, amount 16px, name 16px) or airy (row 72px, tick 56px, amount 30px, name 18px, unit 16px, pack sub-line 13px). Spacing is a loose 4/8/12/16/24 rhythm; bands add 12px above. The list reserves 150px bottom padding (100px wide) for the pinned dock.
 
 Navigation is a five-cell bottom tab bar on phones (PLAN, RECIPES, PANTRY, SHOP, INGREDIENTS). At 48em and up it becomes a side rail (48px rows) and the dock moves to the bottom of the content column (left 208px, max 640px). Below 380px tab labels tighten their tracking to 0.02em but stay at 12px.
 
@@ -214,10 +214,12 @@ Mostly square and ruled, softened where a thing is touched. Ticks are 4px radius
 - **Focus:** 2px outline in the focus colour (yellow dark/AMOLED, Ink light), 2px offset.
 
 ### Board row
-The core unit of the shop list. A grid row (min height 44 or 72px) with a bottom hairline: tick, name (with optional yellow note line such as "Staple, below min stock"), right-aligned figure plus unit, pack hint ("≈ 3 packs"). The whole row is a label, so tapping anywhere ticks; tapping the name opens the amount editor. **Done** rows (in the cart) dim name and figure to secondary grey. **Held** is described below.
+The core unit of the shop list. A grid row (min height 44 or 72px) with a bottom hairline: tick, name (with an optional yellow note line such as "Staple, below min stock", and an optional pack sub-line), right-aligned figure plus unit. The whole row is one button, so tapping the tick, the name or the pack sub-line ticks the row. **Done** rows (in the cart) dim name and figure to secondary grey. **Held** is described below.
+
+**The Row Ticks, The Pencil Edits Rule.** The 44px pencil beside the row is the only way into the amount editor; the name never opens it. Label forwarding from a nested button over the name proved unreliable on touch, so the row stays one unambiguous tap target and the pencil is a separate control. The pure rule lives in `src/lib/shopRow.ts` and is tested there.
 
 ### Column head and category band
-Column head: 24px slate strip with Steel top and bottom rules, labels ITEM / AMOUNT / PACK aligned to their columns. Category band: 28px, caps, Steel bottom rule, "n to buy" at right in secondary grey. The cart head is the same voice with a 44px minimum height and a Clear action.
+Column head: 24px slate strip with Steel top and bottom rules, labels ITEM / AMOUNT aligned to their columns. The pack hint has no head: it is a sub-line under the item. Category band: 28px, caps, Steel bottom rule, "n to buy" at right in secondary grey. The cart head is the same voice with a 44px minimum height and a Clear action.
 
 ### Trip pass (signature)
 Pinned above the tab bar (bottom 68px, 8px side inset): a 64px, 12px-radius slate panel with a Steel border split by Steel dividers into four cells, LEFT, IN CART, PARTNER, QUEUE (columns 0.8 / 0.9 / 1.5 / 1fr). Each cell is a tiny caps label over a 19px tabular value. The partner cell shows the last partner-ticked item and its relative time in the accent colour. Queue reads "synced" when empty, else a count. It floats with the soft shadow.

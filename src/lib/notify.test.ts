@@ -70,6 +70,37 @@ describe('reminderDue', () => {
     // 23:30 New York on the 24th is already the 25th in UTC
     expect(localClock(new Date('2026-11-25T04:30:00Z'), 'America/New_York')).toEqual({ day: '2026-11-24', minutes: 23 * 60 + 30 })
   })
+  it('fires a reminder after the last tick on the next midnight tick', () => {
+    // Rome is CET (UTC+1) in November; 23:50 local is 22:50Z.
+    expect(reminderDue(new Date('2026-11-25T21:00:00Z'), rome, '23:50', null)).toBe(false) // 22:00
+    expect(reminderDue(new Date('2026-11-25T22:30:00Z'), rome, '23:50', null)).toBe(false) // 23:30
+    expect(reminderDue(new Date('2026-11-25T22:50:00Z'), rome, '23:50', null)).toBe(true) // 23:50 (an on-time tick)
+    expect(reminderDue(new Date('2026-11-25T23:00:00Z'), rome, '23:50', null)).toBe(true) // 00:00, the next tick
+    expect(reminderDue(new Date('2026-11-25T23:10:00Z'), rome, '23:50', null)).toBe(true) // 00:10, still inside the grace
+    expect(reminderDue(new Date('2026-11-25T23:10:00Z'), rome, '23:50', '2026-11-26')).toBe(false) // already handled today
+    expect(reminderDue(new Date('2026-11-26T22:50:00Z'), rome, '23:50', '2026-11-26')).toBe(false) // the next evening, handled
+    expect(reminderDue(new Date('2026-11-26T23:00:00Z'), rome, '23:50', '2026-11-26')).toBe(true) // the day after can fire
+  })
+  it('does not repeat an earlier evening reminder on the next midnight tick', () => {
+    // 22:00 and 23:30 have a tick of their own day; their 3-hour grace must not send a second reminder at 00:00.
+    expect(reminderDue(new Date('2026-11-25T21:00:00Z'), rome, '22:00', '2026-11-24')).toBe(true) // 22:00
+    expect(reminderDue(new Date('2026-11-25T23:00:00Z'), rome, '22:00', '2026-11-25')).toBe(false) // 00:00, already sent
+    expect(reminderDue(new Date('2026-11-25T22:30:00Z'), rome, '23:30', '2026-11-24')).toBe(true) // 23:30
+    expect(reminderDue(new Date('2026-11-25T23:00:00Z'), rome, '23:30', '2026-11-25')).toBe(false) // 00:00, already sent
+  })
+  it('follows DST on the spring-forward and fall-back days, including a reminder just before midnight', () => {
+    // 2026-03-29: CET (UTC+1) becomes CEST (UTC+2) at 01:00Z. 23:50 CEST = 21:50Z; midnight is 22:00Z.
+    expect(reminderDue(new Date('2026-03-29T21:00:00Z'), rome, '23:50', null)).toBe(false) // 23:00 CEST
+    expect(reminderDue(new Date('2026-03-29T21:50:00Z'), rome, '23:50', null)).toBe(true) // 23:50 CEST
+    expect(reminderDue(new Date('2026-03-29T22:10:00Z'), rome, '23:50', null)).toBe(true) // 00:10 CEST on the 30th
+    expect(reminderDue(new Date('2026-03-29T22:10:00Z'), rome, '23:50', '2026-03-30')).toBe(false)
+    // 2026-10-25: CEST (UTC+2) falls back to CET (UTC+1) at 01:00Z. 23:50 CET = 22:50Z; midnight CET = 23:00Z.
+    expect(reminderDue(new Date('2026-10-25T21:50:00Z'), rome, '23:50', null)).toBe(false) // 22:50 CET
+    expect(reminderDue(new Date('2026-10-25T22:50:00Z'), rome, '23:50', null)).toBe(true) // 23:50 CET
+    expect(reminderDue(new Date('2026-10-25T23:00:00Z'), rome, '23:50', null)).toBe(true) // 00:00 CET on the 26th
+    expect(reminderDue(new Date('2026-10-25T23:10:00Z'), rome, '23:50', null)).toBe(true) // 00:10 CET on the 26th
+    expect(reminderDue(new Date('2026-10-25T23:10:00Z'), rome, '23:50', '2026-10-26')).toBe(false)
+  })
 })
 
 describe('expiry wording', () => {

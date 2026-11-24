@@ -17,6 +17,7 @@ export default defineConfig({
       manifest: {
         name: 'Spensa',
         short_name: 'Spensa',
+        description: "Plan the week's meals, track the pantry and get the shopping list that follows.",
         display: 'standalone',
         start_url: '/',
         theme_color: '#0b0d10',

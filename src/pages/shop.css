@@ -14,7 +14,9 @@
 .sp-trip { font: 600 13px/1.2 var(--sp-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sp-text2); padding: 4px 16px 10px; }
 .sp-note { font-size: 14px; line-height: 1.4; color: var(--sp-text2); padding: 4px 16px 12px; max-width: 65ch; }
 
-.sp-cols, .sp-row, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 4px 0 4px; }
+/* Two heads only: the pack hint is a sub-line under the name, not a column (MR-042). Amount and unit share the
+   figure's block; the 44px pencil has its own cell in the row but no head. */
+.sp-cols, .sp-band { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 4px; }
 .sp-cols {
   height: 24px; background: var(--sp-panel); border-block: 1px solid var(--sp-edge);
   font: 600 12px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text2);
@@ -22,7 +24,7 @@
 .sp-cols > :nth-child(1) { grid-column: 2; }
 .sp-cols > :nth-child(2) { grid-column: 3; text-align: right; }
 .sp-band {
-  min-height: 28px; margin-top: 12px; border-bottom: 1px solid var(--sp-edge);
+  min-height: 28px; margin: 12px 0 0; border-bottom: 1px solid var(--sp-edge);
   font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
 }
 .sp-band > span { grid-column: 1 / 4; padding-left: 12px; }
@@ -30,11 +32,32 @@
 .sp-band.sp-day { background: var(--sp-panel); border-block: 1px solid var(--sp-rule); margin-top: 0; }
 .sp-band.sp-day > span { grid-column: 1 / -1; }
 
-.sp-row { min-height: var(--row-h); border-bottom: 1px solid var(--sp-rule); position: relative; cursor: pointer; }
-.sp-row > .sp-tickcell { display: grid; place-items: center; min-height: var(--row-h); align-self: stretch; }
+/* Rows: a list item whose one button holds the tick, name and figure; the row-end control is a sibling, never nested. */
+.sp-rows { list-style: none; margin: 0; padding: 0; }
+.sp-row {
+  display: grid; grid-template-columns: var(--c-tick) minmax(0, 1fr) var(--c-edit); align-items: stretch;
+  min-height: var(--row-h); padding: 0 4px; border-bottom: 1px solid var(--sp-rule); position: relative;
+}
+.sp-rowbtn {
+  grid-column: 1 / 3; display: grid; grid-template-columns: var(--c-tick) minmax(0, 1fr) var(--c-amt) var(--c-unit);
+  align-items: center; min-height: var(--row-h); padding: 0; background: none; border: 0; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.sp-rowbtn > .sp-tickcell { display: grid; place-items: center; align-self: stretch; min-height: var(--row-h); }
+/* The board tick: square, 2px Steel border, yellow fill with an Ink check. A mark, not a control. */
+.sp-box { display: grid; place-items: center; width: var(--tick); height: var(--tick); border: 2px solid var(--sp-edge); border-radius: 4px; color: var(--sp-ink); }
+.sp-box[data-checked] { background: var(--sp-yellow); border-color: var(--sp-yellow); }
+.sp-box svg { display: block; }
 .sp-name { font-size: var(--name-size); font-weight: 500; line-height: 1.2; color: var(--sp-text); text-align: left; padding: 6px 4px 6px 0; overflow-wrap: anywhere; }
 /* The row ticks; amount editing lives behind this explicit 44px button so a row tap is never ambiguous. */
+.sp-edit, .sp-putback, .sp-rowend { grid-column: 3; align-self: center; }
 .sp-edit { width: 44px; height: 44px; min-width: 44px; color: var(--sp-text2); }
+.sp-putback {
+  width: 44px; height: 44px; min-width: 44px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: 8px; cursor: pointer; color: var(--sp-accent);
+}
+.sp-putback:hover { color: var(--sp-text); background: var(--sp-rule); }
+.sp-rowend { width: 44px; }
 .sp-name em { display: inline-block; font-style: normal; font-size: 12px; font-weight: 500; margin-top: 2px; }
 .sp-num { font-variant-numeric: tabular-nums lining-nums; text-align: right; font-size: var(--amount-size); font-weight: 600; line-height: 1; }
 .sp-unit { padding-left: 6px; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
@@ -44,13 +67,12 @@
 :root[data-spensa-density='airy'] .sp-packline { font-size: 13px; }
 
 .sp-cart-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; margin-top: 12px; min-height: 44px; border-bottom: 1px solid var(--sp-edge); }
-.sp-cart-head > span { font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text); }
+.sp-cart-title { margin: 0; font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text); }
 .sp-row.sp-done .sp-name, .sp-row.sp-done .sp-num { color: var(--sp-text2); }
 .sp-row.sp-held { background: var(--mantine-primary-color-light); box-shadow: inset 0 0 0 1px var(--sp-yellow); }
 :root[data-spensa-theme='light'] .sp-row.sp-held { background: rgba(245, 204, 59, 0.5); }
 :root[data-spensa-theme='light'] .sp-held .sp-name, :root[data-spensa-theme='light'] .sp-held .sp-name em, :root[data-spensa-theme='light'] .sp-held .sp-num { color: var(--sp-ink); }
 .sp-held .sp-name em { color: var(--sp-accent); }
-.sp-ack { position: absolute; inset: 0 0 0 var(--c-tick); background: none; border: 0; cursor: pointer; }
 
 .sp-add { padding: 4px 16px 8px; }
 .sp-empty { padding: 24px 16px; font-size: 16px; line-height: 1.4; max-width: 65ch; color: var(--sp-text); }
@@ -84,8 +106,8 @@
 .sp-seg-cell.sp-partner .sp-pname { overflow: hidden; text-overflow: ellipsis; }
 .sp-dock-btn { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 
-/* Row keyboard focus: the row (or a control inside it) has focus. */
-.sp-row:focus-visible, .sp-row:has(:focus-visible) { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
+/* Row keyboard focus: the row button and the explicit row-end controls, inset so the row's edges stay put. */
+.sp-rowbtn:focus-visible, .sp-putback:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
 
 /* Undo toast: one bar above the dock. Phones: the dock is 68px + the 64px pass; wide screens: the dock sits in the column. */
 .sp-undo {

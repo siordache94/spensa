@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { runCommand } from './command.ts'
-import { INVITE_ONLY_MESSAGE, readAuthRedirectError, signIn, signOut, signUp, stripAuthRedirectError } from './auth.ts'
+import { INVITE_ONLY_MESSAGE, readAuthRedirectError, resendConfirmation, setNewPassword, signIn, signOut, signUp, stripAuthRedirectError } from './auth.ts'
 import { createFakeAdapter } from './fakeAdapter.ts'
 import { ApiError } from './port.ts'
 
@@ -46,6 +46,69 @@ describe('auth commands on the fake adapter', () => {
 
     expect(await api.auth.currentUserId()).toBeNull()
     await expect(api.auth.session()).resolves.toBeNull()
+  })
+})
+
+describe('sign-up confirmation and password recovery on the fake adapter', () => {
+  it('reports needsConfirmation when the fake has Confirm email on, and leaves no session', async () => {
+    const api = createFakeAdapter({ signUpNeedsConfirmation: true })
+
+    await expect(runCommand(newClient(), api, signUp, { email: ' a@b.c ', password: 'password1', inviteCode: '' }))
+      .resolves.toEqual({ needsConfirmation: true })
+    expect(api.state.signUpEmails).toEqual(['a@b.c'])
+    expect(await api.auth.session()).toBeNull()
+  })
+
+  it('reports no confirmation need when the fake auto-confirms', async () => {
+    const api = createFakeAdapter()
+
+    await expect(runCommand(newClient(), api, signUp, { email: 'a@b.c', password: 'password1', inviteCode: '' }))
+      .resolves.toEqual({ needsConfirmation: false })
+  })
+
+  it('resendConfirmation records the email and needs no invite code', async () => {
+    const api = createFakeAdapter()
+
+    await runCommand(newClient(), api, resendConfirmation, { email: ' a@b.c ' })
+
+    expect(api.state.resendEmails).toEqual(['a@b.c'])
+  })
+
+  it('records a reset request and applies the new password', async () => {
+    const api = createFakeAdapter()
+
+    await api.auth.requestPasswordReset('a@b.c', 'https://spensa.test/')
+    expect(api.state.resetRequests).toEqual([{ email: 'a@b.c', redirectTo: 'https://spensa.test/' }])
+
+    await api.auth.updatePassword('newpassword')
+    expect(api.state.password).toBe('newpassword')
+  })
+
+  it('refuses a password change without a session', async () => {
+    const api = createFakeAdapter({ userId: null })
+    await expect(api.auth.updatePassword('newpassword')).rejects.toThrow('not signed in')
+  })
+
+  it('setNewPassword applies the password and ends the recovery session', async () => {
+    const api = createFakeAdapter({ password: 'password1', userId: 'u1' })
+
+    await runCommand(newClient(), api, setNewPassword, { password: 'newpassword' })
+
+    expect(api.state.password).toBe('newpassword')
+    await expect(api.auth.session()).resolves.toBeNull()
+  })
+
+  it('fires the recovery callback until it is unsubscribed', () => {
+    const api = createFakeAdapter()
+    let calls = 0
+    const off = api.live.onPasswordRecovery(() => { calls += 1 })
+
+    api.emitPasswordRecovery()
+    expect(calls).toBe(1)
+
+    off()
+    api.emitPasswordRecovery()
+    expect(calls).toBe(1)
   })
 })
 

@@ -4,7 +4,7 @@ import { runCommand } from './command.ts'
 import { createFakeAdapter, row } from './fakeAdapter.ts'
 import { keys } from './keys.ts'
 import { answerCheckin, finishShopping, saveMealLines, setNotCooked } from './checkins.ts'
-import type { UnreadCheckinRow } from './port.ts'
+import { PANTRY_CHANGED_MESSAGE, VERSION_CONFLICT, type UnreadCheckinRow } from './port.ts'
 
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
 async function prime(qc: QueryClient, key: readonly unknown[]) {
@@ -62,16 +62,63 @@ describe('check-in commands', () => {
   })
 
   it('done shopping records the snapshot answers and clears every unread check-in', async () => {
-    const api = createFakeAdapter({ unreadCheckins: [checkin('c1', 'm1'), checkin('c2', 'm2')] })
+    const api = createFakeAdapter({ batches: [row.batch({ id: 'b1' })], unreadCheckins: [checkin('c1', 'm1'), checkin('c2', 'm2')] })
     const qc = newClient()
     await prime(qc, keys.checkins.all())
     const answers = [{ meal_id: 'm1', answer: 'not_cooked' as const }, { meal_id: 'm2', answer: 'planned' as const }]
 
-    await runCommand(qc, api, finishShopping, { onDate: '2026-01-05', batches: [{ batch_id: 'b1', qty: 200 }], answers })
+    await runCommand(qc, api, finishShopping, { onDate: '2026-01-05', batches: [{ batch_id: 'b1', qty: 200 }], answers, expectedAt: null })
 
-    expect(api.state.finishedShopping).toEqual([{ onDate: '2026-01-05', batches: [{ batch_id: 'b1', qty: 200 }], answers }])
+    expect(api.state.finishedShopping).toEqual([{ onDate: '2026-01-05', batches: [{ batch_id: 'b1', qty: 200 }], answers, expectedAt: null }])
     expect(api.state.unreadCheckins).toEqual([])
     expect(stale(qc, keys.checkins.all())).toBe(true)
+  })
+
+  it('done shopping sends the version it was computed from and succeeds when it is still current', async () => {
+    const api = createFakeAdapter({ batches: [row.batch({ id: 'b1' })], version: '2026-01-05T10:00:00.123456+00:00' })
+    const qc = newClient()
+
+    await runCommand(qc, api, finishShopping, {
+      onDate: '2026-01-05',
+      batches: [{ batch_id: 'b1', qty: 200 }],
+      answers: [],
+      expectedAt: '2026-01-05T10:00:00.123456+00:00',
+    })
+
+    expect(api.state.finishedShopping).toHaveLength(1)
+  })
+
+  it('a stale version is refused with one friendly sentence, and the pantry is refetched for the retry', async () => {
+    const api = createFakeAdapter({ batches: [row.batch({ id: 'b1' })], version: '2026-01-05T10:00:00Z' })
+    const qc = newClient()
+    await prime(qc, keys.pantry.all())
+
+    const finish = runCommand(qc, api, finishShopping, {
+      onDate: '2026-01-05',
+      batches: [{ batch_id: 'b1', qty: 200 }],
+      answers: [],
+      expectedAt: '2026-01-05T09:00:00Z',
+    })
+
+    await expect(finish).rejects.toMatchObject({ code: VERSION_CONFLICT, message: PANTRY_CHANGED_MESSAGE })
+    expect(api.state.finishedShopping).toEqual([])
+    expect(stale(qc, keys.pantry.all())).toBe(true)
+  })
+
+  it('a snapshot line naming an unknown batch is refused loudly', async () => {
+    const api = createFakeAdapter({ version: 'v1' })
+    const qc = newClient()
+
+    const finish = runCommand(qc, api, finishShopping, {
+      onDate: '2026-01-05',
+      batches: [{ batch_id: 'gone', qty: 200 }],
+      answers: [],
+      expectedAt: 'v1',
+    })
+
+    await expect(finish).rejects.toMatchObject({ code: '23503' })
+    await expect(finish).rejects.toThrow(/unknown batch gone/)
+    expect(api.state.finishedShopping).toEqual([])
   })
 
   it('unread check-ins come back as the port rows', async () => {

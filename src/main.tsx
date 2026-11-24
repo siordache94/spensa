@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import { MantineProvider } from '@mantine/core'
+import { DatesProvider } from '@mantine/dates'
 import { Notifications } from '@mantine/notifications'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
@@ -16,7 +17,9 @@ import { ApiProvider } from './lib/api/context.tsx'
 import { supabaseAdapter } from './lib/api/supabaseAdapter.ts'
 import { registerShopMutations } from './lib/shopMutations.ts'
 import { shouldPersistQuery } from './lib/api/keys.ts'
+import { registerPersistedCopyRemover } from './lib/localData.ts'
 import { readRaw, removeKey, writeRaw } from './lib/storage.ts'
+import { startNavigation } from './lib/navigation.ts'
 
 const maxAge = 1000 * 60 * 60 * 24 * 7
 
@@ -29,12 +32,18 @@ registerShopMutations(queryClient, supabaseAdapter)
 const storage = { getItem: readRaw, setItem: writeRaw, removeItem: removeKey }
 const persister = createSyncStoragePersister({ storage })
 
+// Sign-out teardown (lib/localData.ts) must remove the saved cache too, not just the in-memory one.
+registerPersistedCopyRemover(() => { void persister.removeClient() })
+
 function Root() {
   const [{ theme: name }] = useSettings()
   // AMOLED is the dark scheme with palette overrides (theme.css).
   return (
     <MantineProvider theme={theme} forceColorScheme={name === 'light' ? 'light' : 'dark'}>
-      <Notifications />
+      {/* One date locale for every calendar, picker and label (MR-035). */}
+      <DatesProvider settings={{ locale: 'en-gb' }}>
+      {/* Top centre keeps the stack clear of the tab bar and the trip pass; errors get 8s to be read (MR-040). */}
+      <Notifications position="top-center" autoClose={8000} limit={3} classNames={{ root: 'sp-toasts', notification: 'sp-toast' }} />
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{
@@ -51,9 +60,13 @@ function Root() {
           </BrowserRouter>
         </ApiProvider>
       </PersistQueryClientProvider>
+      </DatesProvider>
     </MantineProvider>
   )
 }
+
+// Install the back policy before the router subscribes to popstate, so a guarded back is caught before it renders.
+startNavigation()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

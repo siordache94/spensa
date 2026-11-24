@@ -10,7 +10,7 @@ import { slotEnd, type CheckinAnswer, type SlotEndTimes } from '../checkin.ts'
 import { defineCommand, invalidateKeys, useCommand } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
-import type { SnapshotBatch, UnreadCheckinRow } from './port.ts'
+import { ApiError, PANTRY_CHANGED_MESSAGE, VERSION_CONFLICT, type SnapshotBatch, type UnreadCheckinRow } from './port.ts'
 
 /** A meal's own amounts from the pantry data (`usePantry().meals`), or null when it follows its recipe. */
 export function mealOwnLines(meal: { planned_meal_lines?: { ingredient_id: string; qty_total: number | string | null }[] | null }): MealAmount[] | null {
@@ -112,13 +112,27 @@ export const saveSlotEndTimes = defineCommand<SlotEndTimes>({
  * "Done shopping": answers (per meal, from the finish dialog), saves the snapshot, clears the trip, and counts every
  * check-in still unread as "cooked as planned", all in one transaction. The batches are the snapshot: compute the
  * quantities with the not-cooked answers applied (snapshotPlan in src/domain/shoppingView.ts).
+ * `expectedAt` is the household version the snapshot was computed from; a household that moved since is refused
+ * (VERSION_CONFLICT) so a partner's batch is never silently dropped (MR-005). The caller keeps the dialog open and
+ * asks for one more tap with the refreshed quantities.
  */
-export const finishShopping = defineCommand<{ onDate: Day; batches: SnapshotBatch[]; answers: FinishAnswer[] }>({
+export const finishShopping = defineCommand<{ onDate: Day; batches: SnapshotBatch[]; answers: FinishAnswer[]; expectedAt: string | null }>({
   name: 'checkins.finishShopping',
-  run: (api, { onDate, batches, answers }) => api.checkins.finishShopping(onDate, batches, answers),
+  run: async (api, { onDate, batches, answers, expectedAt }) => {
+    try {
+      await api.checkins.finishShopping(onDate, batches, answers, expectedAt)
+    } catch (e) {
+      // The server's message names the versions; the person gets one sentence and a fresh list instead.
+      if (e instanceof ApiError && e.code === VERSION_CONFLICT) throw new ApiError(PANTRY_CHANGED_MESSAGE, VERSION_CONFLICT)
+      throw e
+    }
+  },
   invalidates: () => [keys.pantry.all(), keys.checkins.all()],
   when: 'settled',
 })
+
+/** Whether a failed finish means someone else changed the pantry (refetch, keep the dialog open, ask for one more tap). */
+export const isVersionConflict = (e: Error): boolean => e instanceof ApiError && e.code === VERSION_CONFLICT
 
 // ---- Slot end times ----------------------------------------------------------------------------------------------
 /** The household's slots with the end time of each (stored value, else the default for that slot name). */

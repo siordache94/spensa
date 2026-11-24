@@ -57,12 +57,13 @@ export const keys = {
   },
 }
 
+const sameKey = (query: readonly unknown[], key: readonly unknown[]): boolean =>
+  query.length === key.length && key.every((part, i) => query[i] === part)
+
 /**
- * Whether a query goes into the localStorage cache. The auth session holds user metadata (name, invite code),
- * so it stays in memory only. Every other query is persisted as before.
+ * Whether a query goes into the localStorage cache. The auth session holds user metadata (name, invite code) and the
+ * user id must never survive a sign-out, so both stay in memory only. Every other query is persisted as before.
  */
 export function shouldPersistQuery(query: { queryKey: readonly unknown[] }): boolean {
-  const session = keys.auth.session()
-  const k = query.queryKey
-  return !(k.length === session.length && session.every((part, i) => k[i] === part))
+  return !sameKey(query.queryKey, keys.auth.session()) && !sameKey(query.queryKey, keys.auth.uid())
 }

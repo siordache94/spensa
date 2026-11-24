@@ -8,6 +8,8 @@
   --tick: 28px;
   --amount-size: 16px;
   --name-size: 16px;
+  /* touch floor: every interactive area is at least 44px (PRODUCT.md). The visual may stay smaller. */
+  --sp-control-min: 44px;
 }
 :root[data-spensa-density='airy'] {
   --row-h: 72px;
@@ -16,19 +18,43 @@
   --name-size: 18px;
 }
 
+/* Red roles: --sp-red is error text on the ground, --sp-red-fill is a button fill (white --sp-red-contrast on it),
+   --sp-red-text is text on the --sp-red-light destructive surface (the Mantine "light" variant). */
 :root[data-spensa-theme='dark'] {
   --sp-body: #0b0d10; --sp-panel: #1c2127; --sp-rule: #2a2f38; --sp-edge: #6b7178;
-  --sp-text: #f2f2ee; --sp-text2: #9aa0a8; --sp-red: #ff4d4d;
+  --sp-text: #f2f2ee; --sp-text2: #9aa0a8;
+  --sp-red: #ff4d4d; /* 5.9:1 on ground, 5.0:1 on panel */
+  --sp-red-fill: #d92d2d; /* white text 4.8:1: #ff4d4d only reaches 3.3:1 */
+  --sp-red-fill-hover: #c92a2a;
+  --sp-red-contrast: #ffffff;
+  --sp-red-text: #ffffff; /* on --sp-red-light, 12.6:1 */
+  --sp-red-light: #651515; --sp-red-light-hover: #8d1d1d;
+  --sp-switch-off: var(--sp-edge); --sp-switch-on: var(--sp-yellow); --sp-switch-disabled: var(--sp-rule);
+  --sp-disabled-bg: var(--sp-rule); --sp-disabled-text: var(--sp-text2); --sp-disabled-border: #3a4048;
   --sp-accent: #f5cc3b; /* yellow usable as text */ --sp-focus: #f5cc3b;
 }
 :root[data-spensa-theme='light'] {
   --sp-body: #e6e8eb; --sp-panel: #ffffff; --sp-rule: #d3d6da; --sp-edge: #6b7178;
-  --sp-text: #0b0d10; --sp-text2: #4a5058; --sp-red: #b91c1c; /* 5.3:1 on ground #e6e8eb, 6.5:1 on panel */
+  --sp-text: #0b0d10; --sp-text2: #4a5058;
+  --sp-red: #b91c1c; /* 5.3:1 on ground #e6e8eb, 6.5:1 on panel */
+  --sp-red-fill: #b91c1c; /* white text 6.5:1 */
+  --sp-red-fill-hover: #991b1b;
+  --sp-red-contrast: #ffffff;
+  --sp-red-text: #b91c1c; /* on --sp-red-light, 6.1:1 */
+  --sp-red-light: #fff5f5; --sp-red-light-hover: #ffe3e3;
+  --sp-switch-off: var(--sp-edge); /* 4.0:1 on the ground, 4.9:1 on panels */
+  --sp-switch-on: var(--sp-yellow); --sp-switch-disabled: var(--sp-rule);
+  --sp-disabled-bg: var(--sp-rule); --sp-disabled-text: var(--sp-text2); --sp-disabled-border: var(--sp-rule);
   --sp-accent: #0b0d10; /* yellow is a fill only on light */ --sp-focus: #0b0d10;
 }
 :root[data-spensa-theme='amoled'] {
   --sp-body: #000000; --sp-panel: #121212; --sp-rule: #2a2a2a; --sp-edge: #8a8a8a;
-  --sp-text: #ffffff; --sp-text2: #d0d0d0; --sp-red: #ff4d4d;
+  --sp-text: #ffffff; --sp-text2: #d0d0d0;
+  --sp-red: #ff4d4d; --sp-red-fill: #d92d2d; --sp-red-fill-hover: #c92a2a;
+  --sp-red-contrast: #ffffff; --sp-red-text: #ffffff;
+  --sp-red-light: #651515; --sp-red-light-hover: #8d1d1d;
+  --sp-switch-off: var(--sp-edge); --sp-switch-on: var(--sp-yellow); --sp-switch-disabled: var(--sp-rule);
+  --sp-disabled-bg: var(--sp-rule); --sp-disabled-text: var(--sp-text2); --sp-disabled-border: #3a3a3a;
   --sp-accent: #f5cc3b; --sp-focus: #f5cc3b;
 }
 
@@ -44,10 +70,16 @@
   --mantine-color-default-border: var(--sp-edge);
   --mantine-color-anchor: var(--sp-accent);
   --mantine-color-error: var(--sp-red);
-  --mantine-color-red-filled: var(--sp-red);
-  --mantine-color-red-filled-hover: var(--sp-red);
-  --mantine-color-red-light-color: var(--sp-red);
+  --mantine-color-red-filled: var(--sp-red-fill);
+  --mantine-color-red-filled-hover: var(--sp-red-fill-hover);
+  --mantine-color-red-contrast: var(--sp-red-contrast);
+  --mantine-color-red-light: var(--sp-red-light);
+  --mantine-color-red-light-hover: var(--sp-red-light-hover);
+  --mantine-color-red-light-color: var(--sp-red-text);
   --mantine-color-red-outline: var(--sp-red);
+  --mantine-color-disabled: var(--sp-disabled-bg);
+  --mantine-color-disabled-color: var(--sp-disabled-text);
+  --mantine-color-disabled-border: var(--sp-disabled-border);
   --mantine-primary-color-contrast: var(--sp-ink);
   --mantine-color-yellow-contrast: var(--sp-ink);
   --mantine-primary-color-filled: var(--sp-yellow);
@@ -80,6 +112,16 @@ body {
 }
 ::selection { background: var(--sp-yellow); color: var(--sp-ink); }
 :focus-visible { outline: 2px solid var(--sp-focus); outline-offset: 2px; }
+
+/* Focus layer, after Mantine's global rules: Mantine paints the ring with the yellow primary fill,
+   which is only 1.26:1 on the light ground. --sp-focus is Ink on light and yellow on dark/AMOLED.
+   Controls with a visually hidden input put the ring on the part that is visible instead. */
+.mantine-focus-auto:focus-visible, .mantine-focus-always:focus {
+  outline: 2px solid var(--sp-focus);
+  outline-offset: 2px;
+}
+.sp-seg-input:focus-visible + .sp-seg-label { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
+.sp-switch-input:focus-visible + .sp-switch-track { outline: 2px solid var(--sp-focus); outline-offset: 2px; }
 * { scrollbar-width: thin; scrollbar-color: var(--sp-edge) transparent; }
 
 /* ---- component classes (attached in theme.ts) ---- */
@@ -88,13 +130,45 @@ body {
   border: 1px solid var(--sp-rule);
   color: var(--sp-text);
 }
+/* Toasts (Mantine Notifications): top centre under the status bar, on the panel/rule tokens like an overlay,
+   and clear of the tab bar and trip pass. Only the stack's position and the chrome change; colours stay tokens. */
+.sp-toasts[data-position='top-center'] { top: calc(env(safe-area-inset-top, 0px) + var(--mantine-spacing-md)); }
+[data-spensa-theme] .sp-toast {
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-rule);
+  border-radius: var(--mantine-radius-md);
+  color: var(--sp-text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
 .sp-overlay-content { background: var(--sp-panel); border: 1px solid var(--sp-rule); color: var(--sp-text); }
-.sp-modal-header { background: var(--sp-panel); }
+/* The close target is 44px, so the header trades padding for it and keeps its 60px min height:
+   8 + 44 + 8 = 60. The title stays centred and in the header. */
+.sp-modal-header { background: var(--sp-panel); padding-block: 8px; }
+/* Full-screen modals draw edge to edge, so in the installed app they also sit under the status bar and home
+   indicator. Content takes the side insets, the sticky header the top one, and the scrolling body (which holds
+   the bottom actions, since Modal has no footer slot) the bottom one. All insets are 0 in a browser tab. */
+.sp-modal-content[data-full-screen] {
+  padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+}
+.sp-modal-content[data-full-screen] .sp-modal-header {
+  padding-top: calc(var(--mb-padding, var(--mantine-spacing-md)) + env(safe-area-inset-top, 0px));
+}
+.sp-modal-content[data-full-screen] .sp-modal-body {
+  padding-bottom: calc(var(--mb-padding, var(--mantine-spacing-md)) + env(safe-area-inset-bottom, 0px));
+}
 .sp-input {
   background: var(--sp-panel);
   border: 1px solid var(--sp-edge);
   color: var(--sp-text);
   font-family: inherit;
+  /* Mantine sets height from --input-height (36px at the default size); the touch floor wins. */
+  min-height: var(--sp-control-min);
+}
+/* Single-line fields (not textarea): raise the box and its line box together, so the text stays centred when the
+   control grows. max() leaves size="lg" (50px) and larger untouched. */
+input.sp-input {
+  height: max(var(--input-size), var(--sp-control-min));
+  line-height: calc(max(var(--input-size), var(--sp-control-min)) - 2px);
 }
 .sp-input:focus, .sp-input:focus-within { border-color: var(--sp-focus); outline: 1px solid var(--sp-focus); outline-offset: 0; }
 .sp-input[data-error] { border-color: var(--sp-red); }
@@ -112,10 +186,22 @@ body {
 .sp-checkbox-input { border: 2px solid var(--sp-edge); background: transparent; }
 .sp-checkbox-input:checked, .sp-checkbox-input:indeterminate { background: var(--sp-yellow); border-color: var(--sp-yellow); }
 
+/* Switch: yellow when on, Steel when off (the Mantine default off track is 1.06:1 on the light ground),
+   rule tone when disabled. */
+[data-spensa-theme] .sp-switch-root .sp-switch-track { --switch-bg: var(--sp-switch-off); }
+.sp-switch-root .sp-switch-input:checked + .sp-switch-track { --switch-bg: var(--sp-switch-on); }
+.sp-switch-root .sp-switch-input:disabled + .sp-switch-track { --switch-bg: var(--sp-switch-disabled); }
+
+/* Radio: Steel ring on the panel, yellow with an Ink dot when checked, token-muted when disabled. */
+[data-spensa-theme] .sp-radio-input { border-color: var(--sp-edge); background: var(--sp-panel); }
+[data-spensa-theme] .sp-radio-input:checked { background: var(--sp-yellow); border-color: var(--sp-yellow); }
+[data-spensa-theme] .sp-radio-input:disabled { background: var(--sp-disabled-bg); border-color: var(--sp-disabled-border); }
+[data-spensa-theme] .sp-radio-input:checked:not(:disabled) + .sp-radio-icon { color: var(--sp-ink); }
+
 /* SegmentedControl: selected = yellow fill + ink; unselected = text2 on panel; disabled stays readable */
 .sp-seg-root { background: var(--sp-panel); border: 1px solid var(--sp-rule); padding: 3px; }
 .sp-seg-indicator { background: var(--sp-yellow); box-shadow: none; }
-.sp-seg-label { color: var(--sp-text2); font-weight: 500; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+.sp-seg-label { color: var(--sp-text2); font-weight: 500; min-height: var(--sp-control-min); display: flex; align-items: center; justify-content: center; }
 .sp-seg-label[data-active], input:checked + .sp-seg-label { color: var(--sp-ink); font-weight: 700; }
 .sp-seg-label[data-disabled] { color: var(--sp-text2); cursor: not-allowed; }
 .sp-seg-label[data-disabled]:is(input:checked + *) { color: var(--sp-ink); }
@@ -126,8 +212,8 @@ body {
 /* Badge: caps label voice */
 .sp-badge { font-family: var(--sp-label); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
 
-/* Menu */
-.sp-menu-item { color: var(--sp-text); min-height: 44px; }
+/* Menu: rows are controls too, so the trail-friendly 44px floor is a token, not a literal. */
+.sp-menu-item { color: var(--sp-text); min-height: var(--sp-control-min); }
 .sp-menu-item:hover, .sp-menu-item[data-hovered] { background: var(--sp-rule); }
 .sp-menu-divider { border-color: var(--sp-rule); }
 
@@ -136,8 +222,16 @@ body {
 .sp-acc-control:hover { background: var(--sp-rule); }
 .sp-acc-label { font-weight: 600; }
 
-/* Button: filled yellow keeps ink text; label font weight */
-.sp-button { font-weight: 600; }
+/* Button: filled yellow keeps ink text; label font weight. Mantine sizes set height (36 at sm, 42 at md,
+   26 at compact-sm); the touch floor wins without touching the visual padding. */
+.sp-button { font-weight: 600; min-height: var(--sp-control-min); }
+
+/* CloseButton (modal/drawer close and explicit removes): a 44px target around the icon. The icon keeps the
+   20px md visual, so growing the button does not grow the glyph. */
+.sp-close { min-width: var(--sp-control-min); min-height: var(--sp-control-min); --cb-icon-size: 20px; }
+
+/* ActionIcon: same floor for icon-only controls. Sizes already at 44 or above are unchanged. */
+.sp-action { min-width: var(--sp-control-min); min-height: var(--sp-control-min); }
 
 /* Figure columns only */
 .sp-num, .sp-seg-cell > span, .sp-qty, .sp-stepper-value, .sp-stepper-input { font-variant-numeric: tabular-nums lining-nums; }

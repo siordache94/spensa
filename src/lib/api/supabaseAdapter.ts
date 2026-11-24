@@ -1,5 +1,6 @@
 // Production adapter: DataPort over the Supabase client. All `supabase.` calls in the app belong in this file.
 import { isAuthApiError } from '@supabase/supabase-js'
+import { signUpOutcome } from '../authFlow.ts'
 import { mealLinesPayload } from '../../domain/mealLines.ts'
 import { supabase } from '../supabase.ts'
 import { ApiError, type DataPort, type PantryRows, type PushTestResult, type ShoppingItemRow, type UnreadCheckinRow } from './port.ts'
@@ -13,32 +14,75 @@ const authCheck = (error: { message: string; code?: string; status?: number } | 
 
 const INVALID_USER_CODES = ['user_not_found', 'session_not_found', 'bad_jwt']
 
+/**
+ * Password recovery (MR-039). A reset link signs the user in with a recovery session and fires PASSWORD_RECOVERY.
+ * Until the new password is set (or the user backs out), that session must not open the app: it is not a normal
+ * sign-in, and the Auth page has to show the set-password state instead of the shell.
+ */
+let recoveryPending = false
+let watchingRecovery = false
+const recoveryListeners = new Set<() => void>()
+
+/** Subscribes to PASSWORD_RECOVERY before the first session read, so the event that the link fires is never missed. */
+function watchRecovery() {
+  if (watchingRecovery) return
+  watchingRecovery = true
+  supabase.auth.onAuthStateChange((event) => {
+    if (event !== 'PASSWORD_RECOVERY') return
+    recoveryPending = true
+    for (const cb of recoveryListeners) cb()
+  })
+}
+
 const RECIPE_SELECT = '*, recipe_ingredients(ingredient_id, qty_per_portion, ingredients(name, unit))'
 
 export const supabaseAdapter: DataPort = {
   auth: {
     // The local session is read from storage, so this works offline.
-    currentUserId: async () => (await supabase.auth.getSession()).data.session?.user.id ?? null,
+    currentUserId: async () => {
+      watchRecovery()
+      const id = (await supabase.auth.getSession()).data.session?.user.id ?? null
+      return recoveryPending ? null : id
+    },
     async session() {
+      watchRecovery()
       const user = (await supabase.auth.getSession()).data.session?.user
-      return user ? { userId: user.id, metadata: user.user_metadata ?? {} } : null
+      return user && !recoveryPending ? { userId: user.id, metadata: user.user_metadata ?? {} } : null
     },
     async signIn(email, password) {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       authCheck(error)
+      recoveryPending = false
     },
     async signUp(email, password, inviteCode) {
       // The server's "before user created" hook refuses signups without an allowlisted email or valid invite code.
-      const { error } = await supabase.auth.signUp({ email, password, options: { data: inviteCode ? { invite_code: inviteCode } : undefined } })
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: inviteCode ? { invite_code: inviteCode } : undefined } })
+      const outcome = signUpOutcome({ user: data.user, session: data.session, error })
+      if (outcome === 'refused') authCheck(error ?? { message: 'Sign-up was refused.' })
+      return { needsConfirmation: outcome === 'checkEmail' }
+    },
+    async resendConfirmation(email) {
+      const { error } = await supabase.auth.resend({ type: 'signup', email })
       authCheck(error)
+    },
+    async requestPasswordReset(email, redirectTo) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+      authCheck(error)
+    },
+    async updatePassword(password) {
+      const { error } = await supabase.auth.updateUser({ password })
+      authCheck(error)
+      recoveryPending = false
     },
     async signInWithGoogle(redirectTo) {
       const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } })
       authCheck(error)
     },
     async signOut(scope) {
+      recoveryPending = false
       await supabase.auth.signOut({ scope })
     },
+    async recoveryPending() { return recoveryPending },
     async verifyUser() {
       // A local DB reset leaves a JWT for a user that no longer exists. Only a server-side "gone" answer is 'invalid'.
       try {
@@ -75,8 +119,8 @@ export const supabaseAdapter: DataPort = {
       const { error } = await supabase.rpc('rotate_invite_code')
       check(error)
     },
-    async create(name, displayName) {
-      const { error } = await supabase.rpc('create_household', { name, display_name: displayName })
+    async create(name, displayName, timezone) {
+      const { error } = await supabase.rpc('create_household', { name, display_name: displayName, timezone })
       check(error)
     },
     async join(code, displayName) {
@@ -182,6 +226,10 @@ export const supabaseAdapter: DataPort = {
   pantry: {
     async rows(): Promise<PantryRows> {
       // Soft-deleted rows never arrive: RLS select policies hide them (ADR 0003), so replay sees only live facts.
+      // The version is read BEFORE the rows: a write landing in between then leaves the version older than the data,
+      // so "Done shopping" can only falsely conflict, never silently drop the new batch (MR-005).
+      const version = await supabase.from('household_events').select('at').maybeSingle()
+      check(version.error)
       // shortcut: fetches every row since forever; filter by the latest snapshot date when history grows
       const [batches, meals, adjustments, snapshots, ingredients] = await Promise.all([
         supabase.from('batches').select('*'),
@@ -202,6 +250,7 @@ export const supabaseAdapter: DataPort = {
         adjustments: adjustments.data!,
         snapshot: snapshots.data![0],
         ingredients: ingredients.data!,
+        version: version.data?.at,
       }
     },
     async saveEdits(edits) {
@@ -226,10 +275,10 @@ export const supabaseAdapter: DataPort = {
     },
     async buy(b) {
       if (b.shoppingItemId) {
+        // The ingredient is not sent: the RPC reads it from the item, so a tick buys what the list says (MR-003).
         const { data, error } = await supabase.rpc('buy_shopping_item', {
           item_id: b.shoppingItemId,
           batch_id: b.batchId,
-          ingredient_id: b.ingredientId,
           qty: b.qty,
           // Generated types omit null for date args; the RPC takes null to mean "no expiry".
           expires_on: b.expiresOn as string,
@@ -237,13 +286,14 @@ export const supabaseAdapter: DataPort = {
         })
         // The RPC is idempotent on batch_id, so a retry is a plain success.
         check(error)
-        return { itemFound: (data as { item_found?: boolean } | null)?.item_found !== false }
+        const already = (data as { already_purchased?: boolean } | null)?.already_purchased === true
+        return { batchId: b.batchId, alreadyPurchased: already }
       }
       const { error } = await supabase
         .from('batches')
         .upsert({ id: b.batchId, ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn, added_at: b.addedAt }, { onConflict: 'id', ignoreDuplicates: true })
       check(error)
-      return { itemFound: true }
+      return { batchId: b.batchId, alreadyPurchased: false }
     },
     async setChecked(itemId, checked) {
       const { error } = await supabase.from('shopping_items').update({ checked }).eq('id', itemId)
@@ -289,8 +339,14 @@ export const supabaseAdapter: DataPort = {
       const { error } = await supabase.from('households').update({ slot_end_times: times }).not('id', 'is', null)
       check(error)
     },
-    async finishShopping(onDate, batches, answers) {
-      const { error } = await supabase.rpc('finish_shopping', { on_date: onDate, batches, answers })
+    async finishShopping(onDate, batches, answers, expectedAt) {
+      const { error } = await supabase.rpc('finish_shopping', {
+        on_date: onDate,
+        batches,
+        answers,
+        // Generated types omit null for timestamptz args; null = the household had no event row when we read it.
+        expected_at: expectedAt as string,
+      })
       check(error)
     },
   },
@@ -307,6 +363,13 @@ export const supabaseAdapter: DataPort = {
     onSessionChange(onChange) {
       const { data } = supabase.auth.onAuthStateChange((_event, next) => onChange(next !== null))
       return () => data.subscription.unsubscribe()
+    },
+    onPasswordRecovery(cb) {
+      watchRecovery()
+      recoveryListeners.add(cb)
+      // The link may have been consumed before this page mounted: replay the pending recovery once.
+      if (recoveryPending) cb()
+      return () => { recoveryListeners.delete(cb) }
     },
   },
 

@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { runCommand } from './command.ts'
 import { createFakeAdapter } from './fakeAdapter.ts'
-import { createHousehold, joinHousehold, rotateInviteCode, saveSlots, saveYourName, updateHousehold } from './household.ts'
+import { createHousehold, deviceTimeZone, joinHousehold, rotateInviteCode, saveSlots, saveYourName, updateHousehold } from './household.ts'
 import { keys } from './keys.ts'
 
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -41,6 +41,25 @@ describe('household commands on the fake adapter', () => {
     expect(api.state.household).toMatchObject({ horizon_days: 10, expiry_reminder_days: 0, expiring_days: 3 })
     expect(stale(qc, keys.household.settings())).toBe(true)
     expect(stale(qc, keys.pantry.all())).toBe(false)
+  })
+
+  it('updateHousehold with a new timezone invalidates the pantry, unread check-ins and slot end times too', async () => {
+    const api = createFakeAdapter()
+    const qc = newClient()
+    await prime(qc, keys.household.settings(), {})
+    await prime(qc, keys.household.slotEndTimes(), {})
+    await prime(qc, keys.pantry.all(), {})
+    await prime(qc, keys.checkins.unread(), [])
+    await prime(qc, keys.ingredients.all(), [])
+
+    await runCommand(qc, api, updateHousehold, { timezone: 'America/New_York' })
+
+    expect(api.state.household.timezone).toBe('America/New_York')
+    expect(stale(qc, keys.household.settings())).toBe(true)
+    expect(stale(qc, keys.household.slotEndTimes())).toBe(true)
+    expect(stale(qc, keys.pantry.all())).toBe(true)
+    expect(stale(qc, keys.checkins.unread())).toBe(true)
+    expect(stale(qc, keys.ingredients.all())).toBe(false)
   })
 
   it('rotateInviteCode changes the code and invalidates the whole household prefix', async () => {
@@ -83,6 +102,7 @@ describe('household commands on the fake adapter', () => {
 
     await runCommand(qc, api, createHousehold, { name: 'Casa Rossi', displayName: undefined })
     expect(api.state.householdRow?.name).toBe('Casa Rossi')
+    expect(api.state.household.timezone).toBe(deviceTimeZone() ?? 'Europe/Rome')
     expect(stale(qc, keys.household.all())).toBe(true)
 
     api.failNext('household.create', new Error('database exploded'))

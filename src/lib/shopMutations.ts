@@ -3,12 +3,20 @@ import type { QueryClient } from '@tanstack/react-query'
 import { invalidateKeys } from './api/command.ts'
 import { keys } from './api/keys.ts'
 import { localDay } from './api/pantry.ts'
-import type { Buy, DataPort } from './api/port.ts'
+import { ApiError, type Buy, type BuyResult, type DataPort } from './api/port.ts'
 import { markBought, restoreBought } from './shopList.ts'
 
 // A purchase: becomes a batch, and marks the manual item it came from as bought (list -> cart -> pantry).
 // An unsynced batch has no server time yet. It will be recorded after every existing snapshot, so sort it last.
 const UNSYNCED = '9999-12-31T00:00:00Z'
+
+/**
+ * TanStack Query runs mutations of one scope one after another, in the order they were made — including the paused
+ * ones `resumePausedMutations()` continues after a reload. Every shop write (ticks, their undos, the trip setup and
+ * "Done shopping") joins it, so an undo can never reach the server before the tick it undoes and a finish can never
+ * overtake a queued tick (MR-004).
+ */
+export const SHOP_SCOPE = { id: 'shop' } as const
 
 export type { Buy }
 
@@ -99,6 +107,7 @@ export const checkSwitch = (checked: boolean): Switch => ({
 })
 
 const defineSwitch = (qc: QueryClient, api: DataPort, s: Switch) => ({
+  scope: SHOP_SCOPE,
   mutationFn: (id: string) => s.write(api, id),
   onMutate: (id: string) => optimistic(qc, (p, items) => s.change(p, items, id)),
   onError: (e: Error, _id: string, old: Snapshot | undefined) => {
@@ -120,10 +129,19 @@ const defineSwitch = (qc: QueryClient, api: DataPort, s: Switch) => ({
  */
 export function registerShopMutations(qc: QueryClient, api: DataPort) {
   qc.setMutationDefaults(BUY_KEY, {
-    mutationFn: async (b: Buy) => {
-      const { itemFound } = await api.shop.buy(b)
-      // The partner deleted the item before this tick synced. The batch exists anyway: you have it.
-      if (!itemFound) notifications.show({ message: `${b.name} was removed from the list by your partner. Kept it in the pantry.` })
+    scope: SHOP_SCOPE,
+    mutationFn: async (b: Buy): Promise<BuyResult> => {
+      try {
+        return await api.shop.buy(b)
+      } catch (e) {
+        // The item is gone (the partner deleted it, or the trip finished) before this tick synced. The RPC reads the
+        // ingredient from the item, so it cannot buy it any more; say so instead of showing the raw FK error (MR-003).
+        if (e instanceof ApiError && e.code === '23503') {
+          notifications.show({ message: `${b.name} is no longer on the list. Nothing was bought.` })
+          return { batchId: b.batchId, alreadyPurchased: false }
+        }
+        throw e
+      }
     },
     onMutate: async (b: Buy) => {
       // The local session is read from storage, so this works offline.
@@ -144,9 +162,10 @@ export function registerShopMutations(qc: QueryClient, api: DataPort) {
     onSettled: () => refreshAfterTick(qc),
   })
 
-  // Untick: undo a tick done by mistake. Deletes the batch (cascading its snapshot rows and adjustments) and puts
-  // its list item, if any, back on the list.
+  // Untick: undo a tick done by mistake. Removes that one batch (its snapshot rows and adjustments go with it) and
+  // puts the item back on the list only when no other live purchase points at it (MR-003).
   qc.setMutationDefaults(UNBUY_KEY, {
+    scope: SHOP_SCOPE,
     mutationFn: async (batchId: string) => {
       await api.shop.unbuy(batchId)
     },

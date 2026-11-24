@@ -1,12 +1,5 @@
 import { useEffect, useRef } from 'react'
-
-export const UNDO_MS = 4000
-
-/** The toast's words for a tick: "Bought Milk" for a purchase or a to-taste row, "Checked Bread" for a free-text item. */
-export const undoMessage = (kind: 'buy' | 'toTaste' | 'checkText', name: string) => `${kind === 'checkText' ? 'Checked' : 'Bought'} ${name}`
-
-/** The Finish dialog's count line: "1 item not bought", "3 items not bought", or null when nothing is left. */
-export const notBoughtLine = (n: number) => (n === 0 ? null : `${n} ${n === 1 ? 'item' : 'items'} not bought`)
+import { UNDO_MS } from '../lib/undoToast.ts'
 
 /**
  * A short-lived "Bought Milk · Undo" bar above the shop dock. The parent keys it by tick id, so a new tick
@@ -14,7 +7,8 @@ export const notBoughtLine = (n: number) => (n === 0 ? null : `${n} ${n === 1 ? 
  */
 export function UndoToast({ message, onUndo, onExpire }: { message: string; onUndo: () => void; onExpire: () => void }) {
   const expire = useRef(onExpire)
-  expire.current = onExpire
+  // Keep the latest callback without restarting the timer: the parent passes a new function on every render.
+  useEffect(() => { expire.current = onExpire }, [onExpire])
   useEffect(() => {
     const t = setTimeout(() => expire.current(), UNDO_MS)
     return () => clearTimeout(t)

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Alert, Autocomplete, Button, Input, Popover, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Autocomplete, Button, Group, Input, SegmentedControl, Stack, Text, TextInput } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
+import { IconLock } from '@tabler/icons-react'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
@@ -18,14 +19,19 @@ const UNITS: { value: Unit; label: string }[] = [
 
 const DEFAULT_CATEGORIES = ['produce', 'dairy', 'meat', 'fish', 'dry goods', 'frozen', 'other']
 
+// Blank and 0 both mean none (the DB stores null); say it once, next to every optional number.
+const BLANK_RULE = 'Optional · leave blank or 0 for none'
+
 
 type Props = {
   ingredient: Ingredient | null // null = adding
   categories: string[] // categories already used in the household
   onClose: () => void
+  /** The ingredient was deleted: the list offers an Undo toast for it. */
+  onDeleted: (ingredient: Ingredient) => void
 }
 
-export default function IngredientForm({ ingredient, categories, onClose }: Props) {
+export default function IngredientForm({ ingredient, categories, onClose, onDeleted }: Props) {
   const isMobile = useMediaQuery('(max-width: 48em)', true, { getInitialValueInEffect: false })
 
   const [name, setName] = useState(ingredient?.name ?? '')
@@ -35,7 +41,6 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const [shelf, setShelf] = useState<number | null>(ingredient?.shelf_life_days ?? null)
   const [min, setMin] = useState<number | null>(ingredient?.min_stock ?? null)
   const [confirming, setConfirming] = useState(false)
-  const [lockOpen, setLockOpen] = useState(false)
 
   const dirty = useDirty({ name, unit, category, pack, shelf, min })
 
@@ -55,7 +60,10 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
   const canSave = name.trim() !== '' && !invalidNumbers
 
   const save = useCommand(saveIngredient, { onSuccess: onClose })
-  const remove = useCommand(deleteIngredient, { onSuccess: onClose })
+  // Deleted, not gone for good: the list shows an Undo toast (ADR 0003).
+  const remove = useCommand(deleteIngredient, {
+    onSuccess: () => { if (ingredient) onDeleted(ingredient); onClose() },
+  })
 
   function submit(e: FormEvent) {
     e.preventDefault()
@@ -86,28 +94,19 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
           <TextInput label="Name" required value={name} onChange={(e) => setName(e.currentTarget.value)} />
 
-          <Input.Wrapper label="Unit">
-            <Popover opened={lockOpen} onChange={setLockOpen} position="bottom" withArrow width="target">
-              <Popover.Target>
-                {/* disabled controls swallow taps, so a transparent button over it opens the reason */}
-                <div style={{ position: 'relative' }}>
-                  <SegmentedControl fullWidth data={UNITS} value={unit} onChange={(value) => setUnit(value as Unit)} disabled={inUse} />
-                  {inUse && (
-                    <button
-                      type="button"
-                      aria-label="Unit locked. Why?"
-                      onClick={() => setLockOpen((o) => !o)}
-                      style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'none', border: 0, cursor: 'help' }}
-                    />
-                  )}
-                </div>
-              </Popover.Target>
-              <Popover.Dropdown>
-                <Text size="sm">
-                  <b>Locked:</b> used in {usedIn.length === 1 ? 'a recipe' : `${usedIn.length} recipes`} ({usedIn.join(', ')}). Remove it from {usedIn.length === 1 ? 'that recipe' : 'those recipes'} to change the unit.
-                </Text>
-              </Popover.Dropdown>
-            </Popover>
+          {/* The reason is on screen, not behind a tap on a control that looks disabled (MR-045). */}
+          <Input.Wrapper
+            label={(
+              <Group component="span" gap={4} wrap="nowrap">
+                <span>Unit</span>
+                {inUse && <IconLock size={14} stroke={1.75} aria-hidden />}
+              </Group>
+            )}
+            description={inUse
+              ? `Locked: used in ${usedIn.length === 1 ? 'a recipe' : `${usedIn.length} recipes`}. Remove it from ${usedIn.length === 1 ? 'that recipe' : 'them'} to change the unit.`
+              : undefined}
+          >
+            <SegmentedControl fullWidth data={UNITS} value={unit} onChange={(value) => setUnit(value as Unit)} disabled={inUse} />
           </Input.Wrapper>
 
           <Autocomplete
@@ -120,9 +119,9 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
 
           {!toTaste && (
             <>
-              <Stepper label="Pack size" description="Optional" min={0} step={amountStep(unit, pack)} unit={suffix} value={pack} onChange={setPack} error={packError} />
-              <Stepper label="Shelf life" description="Optional" min={0} step={1} unit="days" allowDecimal={false} value={shelf} onChange={setShelf} error={shelfError} />
-              <Stepper label="Min stock" description="Optional" min={0} step={amountStep(unit, min)} unit={suffix} value={min} onChange={setMin} error={minError} />
+              <Stepper label="Pack size" description={BLANK_RULE} min={0} step={amountStep(unit, pack)} unit={suffix} value={pack} onChange={setPack} error={packError} />
+              <Stepper label="Shelf life" description={BLANK_RULE} min={0} step={1} unit="days" allowDecimal={false} value={shelf} onChange={setShelf} error={shelfError} />
+              <Stepper label="Min stock" description={BLANK_RULE} min={0} step={amountStep(unit, min)} unit={suffix} value={min} onChange={setMin} error={minError} />
             </>
           )}
 
@@ -136,7 +135,7 @@ export default function IngredientForm({ ingredient, categories, onClose }: Prop
           <Stack gap="xs" mt="xs">
             {ingredient && (confirming ? (
               <Button.Group>
-                <Button color="red" fullWidth loading={remove.isPending} onClick={() => ingredient && remove.mutate({ id: ingredient.id })}>Delete for good</Button>
+                <Button color="red" fullWidth loading={remove.isPending} onClick={() => ingredient && remove.mutate({ id: ingredient.id })}>Delete</Button>
                 <Button variant="default" fullWidth onClick={() => setConfirming(false)}>Keep</Button>
               </Button.Group>
             ) : (

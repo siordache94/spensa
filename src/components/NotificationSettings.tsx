@@ -61,18 +61,21 @@ export default function NotificationSettings() {
             label="List changes"
             description="When your partner adds or removes things on the shopping list. Changes within 30 seconds arrive as one message."
             checked={p.list_changes}
+            disabled={save.isPending}
             onChange={(e) => patch({ list_changes: e.currentTarget.checked })}
           />
           <Switch
             label="Meal check-ins"
-            description="A silent message about 30 minutes after a slot ends, when a meal could not be covered by the pantry: was it cooked as planned? Slot times are under Household."
+            description="A silent message about 30 minutes after a slot ends, when a meal could not be covered by the pantry: was it cooked as planned? Slot times are under Meal end times."
             checked={p.meal_checkins}
+            disabled={save.isPending}
             onChange={(e) => patch({ meal_checkins: e.currentTarget.checked })}
           />
           <Switch
             label="Expiry reminder"
             description="One message a day listing food that expires soon, if any. How soon is set under Household."
             checked={p.expiry_time !== null}
+            disabled={save.isPending}
             onChange={(e) => patch({ expiry_time: e.currentTarget.checked ? shownTime : null })}
           />
           {p.expiry_time !== null && (
@@ -80,6 +83,7 @@ export default function NotificationSettings() {
               label="Remind me at"
               description="Household time. Off above stops the reminder."
               value={shownTime}
+              disabled={save.isPending}
               onChange={(e) => {
                 const v = e.currentTarget.value
                 setTime(v)

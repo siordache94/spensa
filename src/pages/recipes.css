@@ -1,0 +1,81 @@
+/* Recipe view: rendered instructions and the board's hairline rows, sharing the amount/unit figure column. */
+
+/* Prose: 14px readable column, heading levels start at h3 (page title h1, modal title h2). */
+.sp-prose {
+  max-width: 65ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--sp-text);
+}
+.sp-prose > :first-child { margin-top: 0; }
+.sp-prose > :last-child { margin-bottom: 0; }
+
+/* pre-wrap keeps repeated spaces; hard line breaks are explicit <br> elements from the token tree. */
+.sp-prose p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.sp-prose h3, .sp-prose h4, .sp-prose h5, .sp-prose h6 {
+  margin: 16px 0 8px;
+  font-family: var(--sp-label);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--sp-text);
+}
+.sp-prose h3 { font-size: 18px; }
+.sp-prose h4 { font-size: 16px; }
+.sp-prose h5, .sp-prose h6 { font-size: 14px; }
+
+.sp-prose ul, .sp-prose ol { margin: 0 0 8px; padding-left: 20px; }
+.sp-prose li { margin: 2px 0; }
+.sp-prose li::marker { color: var(--sp-text2); }
+
+.sp-prose strong { font-weight: 600; }
+.sp-prose em { font-style: italic; }
+.sp-prose code {
+  padding: 1px 4px;
+  border: 1px solid var(--sp-rule);
+  border-radius: 4px;
+  background: var(--sp-panel);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.sp-prose a { color: var(--sp-accent); text-decoration: underline; text-underline-offset: 2px; }
+.sp-prose a:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: 2px; }
+
+/* Ingredient rows: hairline rule, name in the flexible column, figure and unit in the board's fixed columns. */
+.sp-rrows { list-style: none; margin: 0; padding: 0; }
+.sp-rrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) calc(var(--amount-size) * 3) 52px;
+  align-items: center;
+  min-height: var(--row-h);
+  border-bottom: 1px solid var(--sp-rule);
+}
+.sp-rrow-name {
+  min-width: 0;
+  font-size: var(--name-size);
+  font-weight: 500;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.sp-rrow-num {
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+  font-size: var(--amount-size);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sp-rrow-unit { padding-left: 6px; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
+.sp-rrow-free { grid-column: 2 / 4; text-align: right; font-size: 14px; color: var(--sp-text2); white-space: nowrap; }
+
+/* Planned-on rows: the same hairline, with the 44px remove control at the end. */
+.sp-rplan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--row-h);
+  padding-left: 4px;
+  border-bottom: 1px solid var(--sp-rule);
+}

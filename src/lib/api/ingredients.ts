@@ -68,3 +68,10 @@ export const deleteIngredient = defineCommand<{ id: string }>({
   },
   invalidates: () => [keys.ingredients.all()],
 })
+
+/** Undo of deleteIngredient: restores the ingredient and the batches deleted with it. */
+export const restoreIngredient = defineCommand<{ id: string }>({
+  name: 'ingredients.restore',
+  run: (api, { id }) => api.trash.restore('ingredients', [id]),
+  invalidates: () => [keys.ingredients.all(), keys.pantry.all()],
+})

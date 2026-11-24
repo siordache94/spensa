@@ -3,13 +3,7 @@
 // the browser. The data purge itself is plain SQL (public.purge_user), so it is covered by
 // supabase/tests/gdpr_smoke.sql; this function only authenticates the caller and orders the steps.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-const reply = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+import { cors, reply } from '../_shared/push.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

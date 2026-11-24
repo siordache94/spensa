@@ -245,5 +245,33 @@ do $$ begin
   end;
 end $$;
 
+-- purge_user removes the uid from every household structure, not just authorship and household_events (MR-046)
+reset role;
+select id as a_meal from public.planned_meals limit 1 \gset
+set local spensa.a_meal = :'a_meal';
+do $$ begin
+  update public.planned_meals set cook_id = '00000000-0000-0000-0000-00000000000c' where id = current_setting('spensa.a_meal')::uuid;
+  insert into public.meal_checkins (household_id, planned_meal_id, answer, answered_at, answered_by)
+    values (current_setting('spensa.a_id')::uuid, current_setting('spensa.a_meal')::uuid, 'planned', now(),
+            '00000000-0000-0000-0000-00000000000c');
+  insert into public.push_list_state (household_id, window_authors)
+    values (current_setting('spensa.a_id')::uuid, array['00000000-0000-0000-0000-00000000000c'::uuid])
+  on conflict (household_id) do update set window_authors = excluded.window_authors;
+end $$;
+set local request.jwt.claims = '{}'; -- service role: no signed-in user
+select public.purge_user('00000000-0000-0000-0000-00000000000c');
+select public.purge_user('00000000-0000-0000-0000-00000000000c'); -- idempotent
+do $$ begin
+  assert not exists (select 1 from public.household_members where user_id = '00000000-0000-0000-0000-00000000000c'), 'membership should be gone';
+  assert exists (select 1 from public.households where name = 'A home'), 'household must survive while a member remains';
+  assert not exists (select 1 from public.household_events where by = '00000000-0000-0000-0000-00000000000c'), 'household_events still names the user';
+  assert (select not ('00000000-0000-0000-0000-00000000000c' = any (window_authors)) from public.push_list_state
+            where household_id = current_setting('spensa.a_id')::uuid), 'window_authors still names the user';
+  assert (select cook_id is null from public.planned_meals where id = current_setting('spensa.a_meal')::uuid), 'cook still names the user';
+  assert (select answered_by is null from public.meal_checkins where planned_meal_id = current_setting('spensa.a_meal')::uuid),
+    'answered_by still names the user';
+end $$;
+delete from auth.users where id = '00000000-0000-0000-0000-00000000000c';
+
 select 'RLS smoke test passed' as result;
 rollback;

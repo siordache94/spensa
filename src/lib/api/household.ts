@@ -11,6 +11,9 @@ export type { HouseholdRow, HouseholdSettings, HouseholdUpdate, Member }
 
 export const memberLabel = (m: Member) => m.display_name ?? 'Someone'
 
+/** The device's IANA zone, sent when creating a household and prefilled by "Use this device's zone". */
+export const deviceTimeZone = (): string | undefined => Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+
 // ---- Queries ---------------------------------------------------------------------------------------------------
 /** Retry for the household row (and everything under it). */
 export const refreshHousehold = (qc: QueryClient) => invalidateKeys(qc, [keys.household.all()])
@@ -37,7 +40,12 @@ export function useMembers() {
 export const updateHousehold = defineCommand<HouseholdUpdate>({
   name: 'household.update',
   run: (api, patch) => api.household.update(patch),
-  invalidates: () => [keys.household.settings()],
+  // A new zone or new slots moves "today", the replay order, slot end times and check-in due times, so the
+  // pantry and the unread check-ins go stale too (keys.household.all() also covers the settings and end times).
+  invalidates: (patch) =>
+    patch.timezone !== undefined || patch.slots !== undefined
+      ? [keys.household.all(), keys.pantry.all(), keys.checkins.all()]
+      : [keys.household.settings()],
 })
 
 /** The meal slots, in day order. Same-day meal order depends on them, hence the pantry too. */
@@ -59,7 +67,7 @@ export const createHousehold = defineCommand<{ name: string; displayName: string
   name: 'household.create',
   run: async (api, { name, displayName }) => {
     try {
-      await api.household.create(name, displayName)
+      await api.household.create(name, displayName, deviceTimeZone())
     } catch (e) {
       throw new Error(joinFailure((e as Error).message))
     }

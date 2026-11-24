@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActionIcon, Button, Group, Menu, Stack, Title } from '@mantine/core'
+import { ActionIcon, Button, Group, Menu, Stack } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
-import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
+import { IconChevronLeft, IconChevronRight, IconDots } from '@tabler/icons-react'
 import { refreshPantry, usePantry } from '../lib/api/pantry.ts'
 import { ErrorState } from '../components/ErrorState.tsx'
 import { Loading } from '../components/Loading.tsx'
 import { useCommand } from '../lib/api/command.ts'
-import { addMeal, deleteMeal, moveMeal, setMealCook } from '../lib/api/plan.ts'
+import { addMeal, deleteMeal, moveMeal, restoreMeal, setMealCook } from '../lib/api/plan.ts'
 import { addDays, replay } from '../domain/replay.ts'
+import { formatDay } from '../lib/format.ts'
 import { useMyId } from '../lib/api/auth.ts'
 import { memberLabel, useMembers } from '../lib/api/household.ts'
 import { parseCheckinParams } from '../lib/checkin.ts'
@@ -17,7 +18,8 @@ import UseSoon from './UseSoon.tsx'
 import NotifyPrompt from '../components/NotifyPrompt.tsx'
 import './plan.css'
 import { CookModal, MealModal, MoveCopyModal, notifyFailure, SlotsModal, type Target } from './PlanEntryModals.tsx'
-import { AmountsModal, CheckinSheet, checkinFailure, useCheckinActions } from './CheckinModals.tsx'
+import { AmountsModal, CheckinSheet, checkinFailure, useCheckinActions, type UndoNotice } from './CheckinModals.tsx'
+import { UndoToast } from '../components/UndoToast.tsx'
 
 type Meal = NonNullable<ReturnType<typeof usePantry>['meals']>[number]
 type Marker = { kind: 'expiring'; text: string }
@@ -31,8 +33,9 @@ type Dialog =
   | { kind: 'amounts'; mealId: string }
   | { kind: 'slots' }
 
-const fmt = (d: string, opts: Intl.DateTimeFormatOptions) =>
-  new Date(`${d}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: 'UTC', ...opts })
+// Initials keep the cook identifiable in a narrow grid cell; the full name stays on the element for screen readers.
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join('') || '?'
 
 // Day-of-week of a calendar day string (0 = Sunday), no local timezone involved.
 const mondayOf = (d: string) => addDays(d, -((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7))
@@ -55,20 +58,25 @@ export default function PlanPage() {
   const copy = useCommand(addMeal, { onError: notifyFailure })
   const setCook = useCommand(setMealCook, { onError: notifyFailure })
   const remove = useCommand(deleteMeal, { onError: notifyFailure })
+  const restore = useCommand(restoreMeal, { onError: notifyFailure })
+  // The row just deleted or re-marked, with the write that reverts it; one toast at a time.
+  const [undo, setUndo] = useState<{ key: number; message: string; run: () => void } | null>(null)
+  const undoKey = useRef(0)
+  const showUndo: UndoNotice = (message, run) => setUndo({ key: ++undoKey.current, message, run })
   const me = useMyId()
   const members = useMembers().data
   const unread = useUnreadCheckins()
   const unreadByMeal = useMemo(() => new Map(unread.items.map((u) => [u.mealId, u])), [unread.items])
   const { answer, notCooked } = useCheckinActions()
+  const answerNow = answer.mutate
 
   const start = today ? addDays(mondayOf(today), weekOffset * 7) : undefined
   const end = start ? addDays(start, 6) : undefined
 
-  const markers = useMemo(() => {
-    const out = new Map<string, Marker[]>()
-    if (!events || !ingredients || !household || !today || !end) return out
+  const markers = new Map<string, Marker[]>()
+  if (events && ingredients && household && today && end) {
     const name = (id: string) => ingredients.find((i) => i.id === id)
-    const add = (mealId: string, m: Marker) => out.set(mealId, [...(out.get(mealId) ?? []), m])
+    const add = (mealId: string, m: Marker) => markers.set(mealId, [...(markers.get(mealId) ?? []), m])
 
     if (end > today) {
       const limit = addDays(today, household.expiring_days)
@@ -82,8 +90,7 @@ export default function PlanPage() {
         add(c.mealId, { kind: 'expiring', text: `Uses expiring ${name(b.ingredientId)?.name ?? ''}` })
       }
     }
-    return out
-  }, [events, ingredients, household, today, end])
+  }
 
   // Deep links from a notification (ADR 0005): ?meal=<id>&checkin=<answer>. Handled once, when the meals are in.
   const linkHandled = useRef(false)
@@ -98,16 +105,16 @@ export default function PlanPage() {
     history.replaceState(history.state, '', url)
     if (!meals.some((m) => m.id === link.mealId)) return
     if (link.answer === 'planned') {
-      answer.mutate({ mealId: link.mealId, answer: 'planned' }, {
+      answerNow({ mealId: link.mealId, answer: 'planned' }, {
         onSuccess: (done) => notifications.show({ message: done ? 'Marked as cooked' : 'This meal was already answered.' }),
         onError: checkinFailure,
       })
-    } else if (link.answer === 'changed') {
-      setDialog({ kind: 'amounts', mealId: link.mealId })
     } else {
-      setDialog({ kind: 'checkin', mealId: link.mealId })
+      // Opening the linked sheet is synchronising with an external system (the notification URL), not derived state.
+      // oxlint-disable-next-line react/set-state-in-effect -- deep links are handled once, when the meals arrive
+      setDialog(link.answer === 'changed' ? { kind: 'amounts', mealId: link.mealId } : { kind: 'checkin', mealId: link.mealId })
     }
-  }, [meals])
+  }, [meals, answerNow])
 
   // Saved plan on screen: a failed refresh gets an inline notice. No saved plan: the page's own error.
   const hasData = household !== undefined && meals !== undefined
@@ -137,15 +144,15 @@ export default function PlanPage() {
 
   return (
     <Stack className="sp-planpage">
-      {error && <ErrorState variant="inline" onRetry={retry} retrying={isFetching} />}
+      {error && <ErrorState variant="inline" message="Can't refresh. Showing the saved plan." onRetry={retry} retrying={isFetching} />}
       <NotifyPrompt />
       <UseSoon />
       <div className="sp-planhead">
       <Group justify="space-between" className="sp-ph-a">
-        <Title order={2} className="sp-ph-title">
-          {fmt(start, { day: 'numeric', month: 'short' })} – {fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}
+        <h1 className="sp-title sp-ph-title">
+          {formatDay(start, { day: 'numeric', month: 'short' })} – {formatDay(end, { day: 'numeric', month: 'short', year: 'numeric' })}
           <span className="sp-ph-rel">{relativeWeek(weekOffset)}</span>
-        </Title>
+        </h1>
         <Button variant="default" size="xs" className="sp-ph-slots" onClick={() => setDialog({ kind: 'slots' })}>Slots</Button>
       </Group>
       <Group className="sp-ph-nav">
@@ -165,7 +172,7 @@ export default function PlanPage() {
           {weekSlots.map((slot) => <span key={slot} className="sp-gutterslot">{slot}</span>)}
         </div>
         {days.map((day) => (
-          <DayBand key={day} isToday={day === today} scrollIntoView={day === today} label={fmt(day, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '')}>
+          <DayBand key={day} isToday={day === today} scrollIntoView={day === today} label={formatDay(day, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, '')}>
             {/* meals in a slot since removed still count as eaten, so keep showing them */}
             {weekSlots.map((slot) => {
               const t = { date: day, slot }
@@ -190,19 +197,29 @@ export default function PlanPage() {
                               className={m.not_cooked ? 'sp-mealrow sp-notcooked' : 'sp-mealrow'}
                               draggable
                               title="Drag to another slot; hold Alt while dropping to copy"
+                              aria-haspopup={toConfirm ? undefined : 'menu'}
                               onClick={toConfirm ? () => setDialog({ kind: 'checkin', mealId: m.id }) : undefined}
                               onDragStart={(e) => e.dataTransfer.setData('text/plain', m.id)}
                             >
                               <span className="sp-mealname">{m.recipes ? `${m.recipes.name} × ${m.portions}` : `Deleted recipe × ${m.portions}`}</span>
                               {m.cook_id && (() => {
                                 const c = members?.find((x) => x.user_id === m.cook_id)
-                                return c ? <span className="sp-cook"><b>Cook</b> · {memberLabel(c)}</span> : null
+                                if (!c) return null
+                                const name = memberLabel(c)
+                                return (
+                                  <span className="sp-cook" title={name}>
+                                    <span aria-hidden="true"><b>Cook</b> · <span className="sp-cook-name">{name}</span><span className="sp-cook-ini">{initials(name)}</span></span>
+                                    <span className="sp-sr">Cook: {name}</span>
+                                  </span>
+                                )
                               })()}
                               {m.not_cooked && <span className="sp-mark sp-notcooked-label">Didn't cook</span>}
                               {toConfirm && <span className="sp-mark sp-confirm">To confirm</span>}
                               {(markers.get(m.id) ?? []).map((k, i) => (
                                 <span key={i} className="sp-mark sp-exp">{k.text}</span>
                               ))}
+                              <span className="sp-mealkebab" aria-hidden="true"><IconDots size={16} /></span>
+                              <span className="sp-draghint" aria-hidden="true">Drag to move · Alt-drag to copy</span>
                             </button>
                           </Menu.Target>
                           <Menu.Dropdown>
@@ -214,12 +231,22 @@ export default function PlanPage() {
                             <Menu.Item onClick={() => setDialog({ kind: 'cook', meal: m })}>Cook…</Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'portions', meal: m })}>Change portions</Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'amounts', mealId: m.id })}>Edit amounts</Menu.Item>
-                            <Menu.Item onClick={() => notCooked.mutate({ mealId: m.id, value: !m.not_cooked }, { onError: checkinFailure })}>
+                            <Menu.Item onClick={() => {
+                              const value = !m.not_cooked
+                              notCooked.mutate({ mealId: m.id, value }, {
+                                onError: checkinFailure,
+                                // A mis-tap is reverted from the toast, not blocked by a confirmation (PRODUCT).
+                                onSuccess: () => showUndo(value ? "Marked didn't cook" : 'Marked cooked', () => notCooked.mutate({ mealId: m.id, value: !value }, { onError: checkinFailure })),
+                              })
+                            }}>
                               {m.not_cooked ? 'Cooked' : "Didn't cook"}
                             </Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'move', meal: m })}>Move to…</Menu.Item>
                             <Menu.Item onClick={() => setDialog({ kind: 'copy', meal: m })}>Copy to…</Menu.Item>
-                            <Menu.Item color="red" onClick={() => remove.mutate({ id: m.id })}>Delete</Menu.Item>
+                            <Menu.Item color="red" onClick={() => {
+                              const name = m.recipes?.name ?? 'meal'
+                              remove.mutate({ id: m.id }, { onSuccess: () => showUndo(`Deleted ${name}`, () => restore.mutate({ id: m.id })) })
+                            }}>Delete</Menu.Item>
                           </Menu.Dropdown>
                         </Menu>
                       )
@@ -250,6 +277,7 @@ export default function PlanPage() {
           unread={unreadByMeal.has(dialogMeal.id)}
           onAmounts={() => setDialog({ kind: 'amounts', mealId: dialogMeal.id })}
           onClose={() => setDialog(null)}
+          showUndo={showUndo}
         />
       )}
       {dialog?.kind === 'amounts' && dialogMeal && (
@@ -258,6 +286,15 @@ export default function PlanPage() {
           unread={unreadByMeal.has(dialogMeal.id)}
           ingredients={ingredients ?? []}
           onClose={() => setDialog(null)}
+        />
+      )}
+
+      {undo && (
+        <UndoToast
+          key={undo.key}
+          message={undo.message}
+          onUndo={() => { undo.run(); setUndo(null) }}
+          onExpire={() => setUndo(null)}
         />
       )}
     </Stack>

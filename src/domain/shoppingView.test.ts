@@ -84,6 +84,21 @@ describe('groupByAisle', () => {
     expect(groups.map(([c, rows]) => [c, names(rows)])).toEqual([['Dry Goods', ['c']], [null, ['a', 'b']]])
   })
 
+  it('merges categories that differ only in case or spaces, labelled by the first one seen', () => {
+    const groups = groupByAisle([
+      e('milk', 'dairy'),
+      e('apple', 'Produce'),
+      e('pear', 'PRODUCE'),
+      e('leek', ' Produce '),
+    ])
+    expect(groups.map(([c, rows]) => [c, names(rows)])).toEqual([['Produce', ['apple', 'pear', 'leek']], ['dairy', ['milk']]])
+  })
+
+  it('treats a blank category as uncategorised', () => {
+    const groups = groupByAisle([e('a', '   '), e('b', null)])
+    expect(groups.map(([c, rows]) => [c, names(rows)])).toEqual([[null, ['a', 'b']]])
+  })
+
   it('no rows, no groups', () => {
     expect(groupByAisle([])).toEqual([])
   })

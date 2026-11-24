@@ -4,6 +4,7 @@ import { useMediaQuery } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { IconX } from '@tabler/icons-react'
 import { GuardedModal, useDirty } from '../components/GuardedModal.tsx'
+import { useModalOverlay } from '../lib/navigation.ts'
 import { Stepper } from '../components/Stepper.tsx'
 import { amountStep } from '../lib/amountStep.ts'
 import { slotLabel, type CheckinAnswer } from '../lib/checkin.ts'
@@ -27,33 +28,44 @@ export type IngredientOption = { id: string; name: string; unit: string }
 
 export const checkinFailure = (e: Error) => notifications.show({ color: 'red', title: 'Could not save', message: e.message })
 
+/** Shows the page's 4s Undo toast: the words, and the write that reverts the answer. */
+export type UndoNotice = (message: string, undo: () => void) => void
+
 /** The answer and "didn't cook" writes for a meal, refreshing the unread list and the plan after each. */
 export function useCheckinActions() {
   return { answer: useCommand(answerCheckin), notCooked: useCommand(setNotCooked) }
 }
 
 /** "Cooked as planned?" for one meal. Tapping a button answers the check-in (or flags the meal) and closes the sheet. */
-export function CheckinSheet({ meal, unread, onAmounts, onClose }: { meal: CheckinMeal; unread: boolean; onAmounts: () => void; onClose: () => void }) {
+export function CheckinSheet({ meal, unread, onAmounts, onClose, showUndo }: {
+  meal: CheckinMeal
+  unread: boolean
+  onAmounts: () => void
+  onClose: () => void
+  showUndo?: UndoNotice
+}) {
   const { answer, notCooked } = useCheckinActions()
+  const close = useModalOverlay(onClose)
   const answerNow = (a: CheckinAnswer) => {
     answer.mutate({ mealId: meal.id, answer: a }, { onError: checkinFailure })
-    onClose()
+    close()
+  }
+  // A mis-tapped "Didn't cook" is one tap to revert: an Undo toast, no confirmation (PRODUCT).
+  const markNotCooked = () => {
+    notCooked.mutate({ mealId: meal.id, value: true }, {
+      onError: checkinFailure,
+      onSuccess: () => showUndo?.("Marked didn't cook", () => notCooked.mutate({ mealId: meal.id, value: false }, { onError: checkinFailure })),
+    })
+    close()
   }
   return (
-    <Modal opened onClose={onClose} title={`${slotLabel(meal.slot)} · ${meal.recipes?.name ?? 'Deleted recipe'}`} centered>
+    <Modal opened onClose={close} title={`${slotLabel(meal.slot)} · ${meal.recipes?.name ?? 'Deleted recipe'}`} centered>
       <Stack>
         <Text size="sm">Cooked as planned?</Text>
         <Button size="lg" onClick={() => answerNow('planned')}>Cooked as planned</Button>
         {/* the amounts editor answers "changed" once it is saved */}
         <Button size="lg" variant="default" onClick={onAmounts}>Changed it</Button>
-        <Button
-          size="lg"
-          variant="default"
-          onClick={() => {
-            notCooked.mutate({ mealId: meal.id, value: true }, { onError: checkinFailure })
-            onClose()
-          }}
-        >
+        <Button size="lg" variant="default" onClick={markNotCooked}>
           Didn't cook
         </Button>
         {unread && (

@@ -6,21 +6,71 @@
   display: flex; align-items: baseline; gap: 8px;
   min-height: 32px; padding: 6px 16px; margin-top: 12px;
   background: var(--sp-panel); border-block: 1px solid var(--sp-rule);
-  font: 600 13px/1 var(--sp-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--sp-text);
+  color: var(--sp-text);
 }
-.sp-inv-band > .sp-inv-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-inv-band > .sp-inv-unit { color: var(--sp-text2); letter-spacing: 0.1em; }
-.sp-inv-band > .sp-inv-total { margin-left: auto; color: var(--sp-text2); letter-spacing: 0.1em; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+/* The band is structure; the name is a name, never caps (DESIGN: names are never set in caps). */
+.sp-inv-band > .sp-inv-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mantine-font-family); font-size: var(--name-size, 16px); font-weight: 500; line-height: 1.2;
+  letter-spacing: 0; text-transform: none;
+}
+.sp-inv-band > .sp-inv-unit { color: var(--sp-text2); }
+.sp-inv-band > .sp-inv-total {
+  margin-left: auto; color: var(--sp-text2); letter-spacing: 0.1em; text-transform: none;
+  font: 600 13px/1 var(--sp-label); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap;
+}
+/* The edit row has two shapes (MR-019):
+   - a batch already in the pantry is a tappable summary (amount or pending change, over its expiry) with the 44px
+     remove control beside it; tapping reveals the four corrections and the expiry picker;
+   - a line added in this edit is a purchase, so it keeps the direct amount control.
+   At 360px the summary is two stacked lines, which keeps amount + change + expiry + remove inside the 284px column. */
 .sp-inv-row {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) 44px; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center;
+  column-gap: 8px; row-gap: 4px;
   min-height: 52px; padding: 4px 8px 4px 16px; border-bottom: 1px solid var(--sp-rule);
 }
-.sp-inv-row[data-removed] .sp-inv-cells { opacity: 0.45; }
-.sp-inv-cells { display: contents; }
-.sp-inv-row[data-removed] { grid-template-columns: minmax(0, 1fr) auto; }
-.sp-inv-gone { font-weight: 500; color: var(--sp-text2); }
+.sp-inv-row:focus { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
+
+/* Existing batch: amount/change on the first line, expiry under it; the ✕ removes the batch. */
+.sp-inv-row[data-kind='batch'] > :nth-child(1) { grid-column: 1; grid-row: 1; }
+.sp-inv-row[data-kind='batch'] > :nth-child(2) { grid-column: 2; grid-row: 1; justify-self: center; }
+.sp-inv-row[data-kind='batch'][data-open] { background: var(--sp-panel); }
+.sp-inv-summary {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-width: 0; min-height: 44px; padding: 6px 0;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.sp-inv-summary:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
+.sp-inv-sum {
+  max-width: 100%; font-variant-numeric: tabular-nums lining-nums;
+  font-size: var(--amount-size, 16px); font-weight: 600; line-height: 1.1; color: var(--sp-text); overflow-wrap: anywhere;
+}
+.sp-inv-sum[data-gone] { color: var(--sp-text2); }
+.sp-inv-sum-meta { max-width: 100%; font-size: 12px; font-weight: 500; line-height: 1.15; color: var(--sp-text2); }
+.sp-inv-actions {
+  grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  padding: 2px 0 10px;
+}
+.sp-inv-actions > .sp-inv-expiry { grid-column: 1 / -1; width: 100%; max-width: 320px; }
+
+/* New line: amount control, expiry and remove, stacked at 360px so nothing collides (MR-032). */
+.sp-inv-row[data-kind='new'] > .sp-inv-amount { grid-column: 1; grid-row: 1; min-width: 0; }
+.sp-inv-row[data-kind='new'] > .sp-inv-date { grid-column: 1; grid-row: 2; }
+.sp-inv-row[data-kind='new'] > .sp-inv-remove { grid-column: 2; grid-row: 1 / span 2; justify-self: center; }
+
+/* From 480px the summary reads on one line; from 640px the four actions fit in one row. */
+@media (min-width: 30em) {
+  .sp-inv-summary { flex-direction: row; align-items: baseline; flex-wrap: wrap; column-gap: 10px; }
+  .sp-inv-row[data-kind='new'] { grid-template-columns: auto minmax(96px, 1fr) 44px; }
+  .sp-inv-row[data-kind='new'] > .sp-inv-amount { grid-column: 1; grid-row: 1; }
+  .sp-inv-row[data-kind='new'] > .sp-inv-date { grid-column: 2; grid-row: 1; }
+  .sp-inv-row[data-kind='new'] > .sp-inv-remove { grid-column: 3; grid-row: 1; }
+}
+@media (min-width: 40em) {
+  .sp-inv-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .sp-inv-more { padding: 0 8px 0 12px; }
-.sp-inv-add { padding: 16px 16px 0; }
+.sp-inv-add { padding: 12px 16px 8px; background: var(--sp-body); border-bottom: 1px solid var(--sp-rule); }
 .sp-savebar {
   position: fixed; z-index: 90; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   display: flex; gap: 8px; padding: 8px; background: var(--sp-panel); border: 1px solid var(--sp-edge); border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
@@ -32,7 +82,15 @@
   .sp-pantry { max-width: 760px; margin-inline: auto; }
   .sp-inv-body { margin-inline: 0; }
 }
+/* Read mode: the whole row is one button into edit mode (MR-019), so a correction starts with the row that needs it. */
 .sp-inv-read { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--row-h, 44px); padding: 6px 16px; border-bottom: 1px solid var(--sp-rule); }
+button.sp-inv-read {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid var(--sp-rule);
+  color: var(--sp-text); font: inherit; text-align: left; cursor: pointer;
+}
+button.sp-inv-read:hover { background: var(--sp-panel); }
+button.sp-inv-read:active { background: var(--sp-rule); }
+button.sp-inv-read:focus-visible { outline: 2px solid var(--sp-focus); outline-offset: -2px; }
 .sp-inv-rname { min-width: 0; font-size: var(--name-size, 16px); font-weight: 500; line-height: 1.2; color: var(--sp-text); overflow-wrap: anywhere; }
 .sp-inv-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; line-height: 1.15; color: var(--sp-text2); }
 .sp-inv-sub > .sp-inv-hint { padding: 2px 0 0; }
@@ -44,8 +102,13 @@
 :root[data-spensa-theme='light'] .sp-inv-hint:not([data-expired])::before { background: var(--sp-yellow); box-shadow: inset 0 0 0 1px var(--sp-ink); }
 .sp-inv-hint[data-expired] { color: var(--sp-red); }
 .sp-inv-hint[data-expired]::before { background: var(--sp-red); }
+/* The "Finished / Threw it away" helper: a sentence, not a tracked caps label. */
+.sp-menu-note { font-family: var(--mantine-font-family); font-size: 12px; font-weight: 500; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--sp-text2); }
 .sp-inv-row .sp-stepper-input { width: 4ch; }
-.sp-inv-date { min-width: 96px; max-width: 200px; }
+.sp-inv-date { min-width: 0; max-width: 200px; }
 .sp-inv-date .mantine-InputBase-input, .sp-inv-date input { white-space: nowrap; padding-inline: 8px; }
 /* fixed field width so the date column lines up across rows whatever the unit */
 .sp-inv-row .sp-stepper-field { flex: none; width: 100px; }
+/* rebase notice: the dropped edits are a short list, not another save form */
+.sp-inv-dropped { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.35; color: var(--sp-text2); }
+.sp-inv-dropped li::marker { color: var(--sp-accent); }

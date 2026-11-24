@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0B0D10" />
+    <!-- Before first paint: mirror the persisted settings (key, attributes and colours in src/lib/settings.ts), so the ground and theme-color never flash dark. -->
+    <script>
+      (function () {
+        var saved = {}
+        try {
+          var parsed = JSON.parse(localStorage.getItem('spensa.settings') || '{}')
+          if (parsed && typeof parsed === 'object') saved = parsed
+        } catch (e) { /* private mode or bad JSON: keep the defaults */ }
+        var theme = saved.theme
+        if (theme !== 'light' && theme !== 'dark' && theme !== 'amoled') {
+          theme = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        }
+        var root = document.documentElement
+        root.dataset.spensaTheme = theme
+        root.dataset.spensaDensity = saved.density === 'airy' ? 'airy' : 'compact'
+        document.querySelector('meta[name="theme-color"]').setAttribute('content',
+          theme === 'light' ? '#E6E8EB' : theme === 'amoled' ? '#000000' : '#0B0D10')
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

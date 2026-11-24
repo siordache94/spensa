@@ -3,7 +3,9 @@ import { readJson, writeJson } from './storage.ts'
 
 export type ThemeName = 'light' | 'dark' | 'amoled'
 export type Density = 'compact' | 'airy'
-export type Settings = { theme: ThemeName; density: Density }
+/** `theme` is the theme in force; `themeChoice` is the stored pick, or null while the device decides. */
+export type Settings = { theme: ThemeName; themeChoice: ThemeName | null; density: Density }
+export type SettingsPatch = { themeChoice?: ThemeName | null; density?: Density }
 
 const KEY = 'spensa.settings'
 const themes: ThemeName[] = ['light', 'dark', 'amoled']
@@ -34,6 +36,7 @@ function compute(): Settings {
   return {
     // No saved theme: follow the system (light or dark; amoled is always a choice).
     theme: stored.theme ?? (media?.matches ? 'light' : 'dark'),
+    themeChoice: stored.theme ?? null,
     density: stored.density ?? 'compact',
   }
 }
@@ -54,8 +57,13 @@ function refresh() {
 apply(snapshot)
 media?.addEventListener('change', () => { if (!stored.theme) refresh() })
 
-export function updateSettings(patch: Partial<Settings>) {
-  stored = { ...stored, ...patch }
+export function updateSettings(patch: SettingsPatch) {
+  // Auto clears the stored theme, so index.html and this module fall back to the system again.
+  if (patch.themeChoice !== undefined) {
+    if (patch.themeChoice === null) delete stored.theme
+    else stored.theme = patch.themeChoice
+  }
+  if (patch.density !== undefined) stored.density = patch.density
   write(stored)
   refresh()
 }

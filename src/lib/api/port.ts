@@ -21,6 +21,14 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The SQLSTATE finish_shopping raises when the household changed since the client computed the snapshot (MR-005).
+ * The client refetches, keeps the dialog open and asks for one more tap.
+ */
+export const VERSION_CONFLICT = '40001'
+/** What the person sees on a version conflict. */
+export const PANTRY_CHANGED_MESSAGE = 'The pantry changed on the other phone — review and finish again'
+
 export type Ingredient = Tables<'ingredients'>
 export type IngredientInput = TablesInsert<'ingredients'>
 
@@ -99,6 +107,11 @@ export type PantryRows = {
   /** The latest snapshot, if any. */
   snapshot: PantrySnapshotRow | undefined
   ingredients: Tables<'ingredients'>[]
+  /**
+   * The household's event clock (`household_events.at`) when these rows were read, undefined until the first write.
+   * "Done shopping" sends it back so the server can refuse a snapshot computed from stale facts (MR-005).
+   */
+  version: string | undefined
 }
 
 // batchId and addedAt are generated when ticking, so a retry can't double-insert.
@@ -113,6 +126,12 @@ export type Buy = {
   addedAt: string
 }
 
+/** What a tick bought. `alreadyPurchased` is true when the partner had bought the same list item first (MR-003). */
+export type BuyResult = {
+  batchId: string
+  alreadyPurchased: boolean
+}
+
 export interface DataPort {
   auth: {
     /** From the locally stored session, so it works offline. */
@@ -121,8 +140,19 @@ export interface DataPort {
     session(): Promise<AuthSession | null>
     /** Throws ApiError (with status) when the server refuses. */
     signIn(email: string, password: string): Promise<void>
-    /** `inviteCode` undefined when the page has none. Throws ApiError with status 403 when the sign-up is refused. */
-    signUp(email: string, password: string, inviteCode: string | undefined): Promise<void>
+    /**
+     * `inviteCode` undefined when the page has none. Throws ApiError with status 403 when the sign-up is refused.
+     * `needsConfirmation` is true when Supabase created the user but returned no session (Confirm email on).
+     */
+    signUp(email: string, password: string, inviteCode: string | undefined): Promise<{ needsConfirmation: boolean }>
+    /** Sends the sign-up confirmation email again (no invite code needed). */
+    resendConfirmation(email: string): Promise<void>
+    /** Sends the password reset email; `redirectTo` is where the recovery link opens the app. */
+    requestPasswordReset(email: string, redirectTo: string): Promise<void>
+    /** Sets the password of the signed-in (recovery) session. */
+    updatePassword(password: string): Promise<void>
+    /** True while a password-recovery link is open: the app must show the set-password screen, not the shell. */
+    recoveryPending(): Promise<boolean>
     /** Starts the Google redirect. `redirectTo` is where Google sends the user back. */
     signInWithGoogle(redirectTo: string): Promise<void>
     /** 'local' clears this device only (the server session is already gone). Errors are ignored, as before. */
@@ -137,8 +167,8 @@ export interface DataPort {
     update(patch: HouseholdUpdate): Promise<void>
     /** Gives the household a new invite code; the old code, link and QR stop working. */
     rotateInviteCode(): Promise<void>
-    /** Throws ApiError with the server message when the name or the code is refused. */
-    create(name: string, displayName: string | undefined): Promise<void>
+    /** Throws ApiError with the server message when the name or the code is refused. `timezone` undefined keeps the default. */
+    create(name: string, displayName: string | undefined, timezone: string | undefined): Promise<void>
     join(code: string, displayName: string | undefined): Promise<void>
     members(): Promise<Member[]>
     setMemberName(userId: string, displayName: string): Promise<void>
@@ -182,8 +212,12 @@ export interface DataPort {
     addItem(item: ShoppingItemInput): Promise<void>
     /** Whether a meal is left off the trip's shopping (it is still planned and eaten). */
     setMealSkip(mealId: string, skip: boolean): Promise<void>
-    /** Idempotent on batchId. `itemFound` is false when the list item was already deleted by the partner. */
-    buy(b: Buy): Promise<{ itemFound: boolean }>
+    /**
+     * Turns a tick into a batch. Idempotent on `batchId`. The RPC reads the ingredient from the list item (it is not
+     * sent), refuses a free-text item with code 22023 and an item that is gone with 23503. `alreadyPurchased` is true
+     * when another live purchase of the same item existed first, so the page can offer Keep both / Put one back.
+     */
+    buy(b: Buy): Promise<BuyResult>
     setChecked(itemId: string, checked: boolean): Promise<void>
     unbuy(batchId: string): Promise<void>
   }
@@ -200,14 +234,23 @@ export interface DataPort {
     slotEndTimes(): Promise<SlotSettings>
     /** End time ('HH:MM') per slot name. */
     saveSlotEndTimes(times: Record<string, string>): Promise<void>
-    /** "Done shopping": snapshot + answers in one transaction. */
-    finishShopping(onDate: Day, batches: SnapshotBatch[], answers: FinishAnswer[]): Promise<void>
+    /**
+     * "Done shopping": snapshot + answers in one transaction. `expectedAt` is the household version the snapshot was
+     * computed from (`usePantryState().version`); the server refuses a stale one with code 40001, unknown batches with
+     * 23503, and a date other than the household's today with 22023 (the message names the expected date).
+     */
+    finishShopping(onDate: Day, batches: SnapshotBatch[], answers: FinishAnswer[], expectedAt: string | null): Promise<void>
   }
   live: {
     /** Calls `onEvent` for every change to the household's events row (`by` = who wrote it, null if unknown). Returns the unsubscribe. */
     subscribeHouseholdEvents(topic: string, onEvent: (by: string | null) => void): () => void
     /** Calls `onChange` with whether a session exists after every sign-in, sign-out and token refresh. Returns the unsubscribe. */
     onSessionChange(onChange: (signedIn: boolean) => void): () => void
+    /**
+     * Calls `cb` when a password recovery link opens the app (Supabase PASSWORD_RECOVERY). If the link was already
+     * consumed before the page subscribed, `cb` runs on subscribe. Returns the unsubscribe.
+     */
+    onPasswordRecovery(cb: () => void): () => void
   }
   account: {
     /** Everything the household holds about the user, as the server returns it. */

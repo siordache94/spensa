@@ -4,6 +4,7 @@ import { defineCommand } from './command.ts'
 import { useApi } from './context.tsx'
 import { keys } from './keys.ts'
 import { ApiError } from './port.ts'
+import { readTrust } from '../deviceTrust.ts'
 
 export type { AuthSession } from './port.ts'
 
@@ -39,10 +40,18 @@ export function stripAuthRedirectError(search: string, hash: string): { search: 
 }
 
 // ---- Queries ---------------------------------------------------------------------------------------------------
-/** The signed-in user's id. undefined while it is being read, null when signed out. Stays until sign-out. */
+/**
+ * The signed-in user's id. undefined while it is being read, null when signed out. Stays until sign-out.
+ * Offline after the access token expired the adapter has no session (MR-008); the device-trust record still knows
+ * who was signed in, so partner highlighting and cook actions keep working in the saved shell.
+ */
 export function useMyId(): string | null | undefined {
   const api = useApi()
-  return useQuery({ queryKey: keys.auth.uid(), staleTime: Infinity, queryFn: () => api.auth.currentUserId() }).data
+  return useQuery({
+    queryKey: keys.auth.uid(),
+    staleTime: Infinity,
+    queryFn: async () => (await api.auth.currentUserId()) ?? readTrust()?.userId ?? null,
+  }).data
 }
 
 /** The locally stored session (its metadata holds the name and invite code from the sign-up form). */
@@ -58,15 +67,39 @@ export const signIn = defineCommand<{ email: string; password: string }>({
   invalidates: () => [],
 })
 
-export const signUp = defineCommand<{ email: string; password: string; inviteCode: string }>({
+export const signUp = defineCommand<{ email: string; password: string; inviteCode: string }, { needsConfirmation: boolean }>({
   name: 'auth.signUp',
   run: async (api, { email, password, inviteCode }) => {
     try {
-      await api.auth.signUp(email.trim(), password, inviteCode.trim() || undefined)
+      return await api.auth.signUp(email.trim(), password, inviteCode.trim() || undefined)
     } catch (e) {
       if (e instanceof ApiError && (e.status === 403 || e.message.includes('invite-only'))) throw new Error(INVITE_ONLY_MESSAGE)
       throw e
     }
+  },
+  invalidates: () => [],
+})
+
+/** Sends the sign-up confirmation email again (MR-015). */
+export const resendConfirmation = defineCommand<{ email: string }>({
+  name: 'auth.resendConfirmation',
+  run: (api, { email }) => api.auth.resendConfirmation(email.trim()),
+  invalidates: () => [],
+})
+
+/** Sends the password reset email; the link opens this app (MR-039). */
+export const requestPasswordReset = defineCommand<{ email: string }>({
+  name: 'auth.requestPasswordReset',
+  run: (api, { email }) => api.auth.requestPasswordReset(email.trim(), `${window.location.origin}${window.location.pathname}`),
+  invalidates: () => [],
+})
+
+/** Sets the password of the recovery session, then ends it: the user signs in normally with the new password. */
+export const setNewPassword = defineCommand<{ password: string }>({
+  name: 'auth.setNewPassword',
+  run: async (api, { password }) => {
+    await api.auth.updatePassword(password)
+    await api.auth.signOut('local')
   },
   invalidates: () => [],
 })

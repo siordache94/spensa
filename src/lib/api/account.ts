@@ -1,7 +1,5 @@
 // Account aggregate: the user's own data export and account deletion. Pages import from here.
-import { useQueryClient } from '@tanstack/react-query'
-import { defineCommand, useCommand } from './command.ts'
-import { useApi } from './context.tsx'
+import { defineCommand } from './command.ts'
 
 /** The JSON of everything the household holds about the user (the page saves it as a file). */
 export const exportMyData = defineCommand<void, unknown>({
@@ -17,18 +15,3 @@ export const deleteAccount = defineCommand<void>({
   invalidates: () => [],
 })
 
-/**
- * deleteAccount, then the local side: the cache is cleared and this device signs out (the server session is already
- * gone, so the sign-out is local only).
- */
-export function useDeleteAccount(options: { onError?: (e: Error) => void } = {}) {
-  const api = useApi()
-  const qc = useQueryClient()
-  return useCommand(deleteAccount, {
-    ...options,
-    onSuccess: () => {
-      qc.clear()
-      void api.auth.signOut('local')
-    },
-  })
-}

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
-import dayjs from 'dayjs'
 import { usePantryState } from '../lib/api/pantry.ts'
-import { round1 } from '../lib/format.ts'
+import { formatDay, formatQuantity, round1 } from '../lib/format.ts'
 import './lists.css'
 import './pantry.css'
 
@@ -30,10 +29,10 @@ export default function UseSoon() {
           <div key={batch.id} className="sp-lrow">
             <span className="sp-lrow-main">
               <span className="sp-lrow-name">{ingredient?.name ?? 'Unknown'}</span>
-              <span className="sp-lrow-sub">{round1(amount)} {ingredient?.unit}</span>
+              <span className="sp-lrow-sub">{formatQuantity(round1(amount), ingredient?.unit)}</span>
             </span>
             <span className="sp-inv-hint" data-expired={expired ? '' : undefined}>
-              {expired ? 'Expired' : 'Expires'} {dayjs(expiresOn).format('D MMM')}
+              {expired ? 'Expired' : 'Expires'} {formatDay(expiresOn)}
             </span>
           </div>
         )

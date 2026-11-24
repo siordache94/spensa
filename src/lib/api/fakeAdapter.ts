@@ -6,8 +6,9 @@ import type { FinishAnswer } from '../../domain/checkinAnswers.ts'
 import type { PantryEdits } from '../../domain/pantryEdits.ts'
 import { mealLinesPayload } from '../../domain/mealLines.ts'
 import type { MealAmount } from '../../domain/replay.ts'
+import type { CheckinAnswer } from '../checkin.ts'
 import {
-  ApiError, type AuthSession, type DataPort, type HouseholdRow, type HouseholdSettings, type Member, type PantryMealRow, type PantrySnapshotRow,
+  ApiError, PANTRY_CHANGED_MESSAGE, VERSION_CONFLICT, type AuthSession, type DataPort, type HouseholdRow, type HouseholdSettings, type Member, type PantryMealRow, type PantrySnapshotRow,
   type PushPrefsRow, type PushTestResult, type Recipe, type SnapshotBatch, type UnreadCheckinRow,
 } from './port.ts'
 
@@ -34,10 +35,29 @@ export type FakeState = {
   recipes: Recipe[]
   /** Unread meal check-ins, oldest first (what checkins.unread returns). */
   unreadCheckins: UnreadCheckinRow[]
+  /** Unread check-ins of soft-deleted meals, kept so a restore brings them back (the server's soft cascade). */
+  deletedUnreadCheckins: UnreadCheckinRow[]
   /** What pantry.saveEdits was called with, in order. */
   savedEdits: PantryEdits[]
   /** What checkins.finishShopping was called with, in order. */
-  finishedShopping: { onDate: string; batches: SnapshotBatch[]; answers: FinishAnswer[] }[]
+  finishedShopping: { onDate: string; batches: SnapshotBatch[]; answers: FinishAnswer[]; expectedAt: string | null }[]
+  /** What auth.signUp returns: true with Confirm email on (a user was created, no session). */
+  signUpNeedsConfirmation: boolean
+  /** Emails auth.signUp was called with, in order. */
+  signUpEmails: string[]
+  /** Emails auth.resendConfirmation was called with, in order. */
+  resendEmails: string[]
+  /** Password reset requests, in order. */
+  resetRequests: { email: string; redirectTo: string }[]
+  /** The password auth.updatePassword last set. */
+  password: string
+  /** True after a recovery link fires, until the password is set or the user signs out. */
+  recoveryPending: boolean
+  /**
+   * The household event clock (`household_events.at`), undefined until the first write. finishShopping refuses a
+   * different expectedAt, as the server does (MR-005); bump it to simulate a partner write.
+   */
+  version: string | undefined
 }
 
 export type FakeApi = DataPort & {
@@ -48,6 +68,8 @@ export type FakeApi = DataPort & {
   emitHouseholdEvent(by: string | null): void
   /** Makes the session feed fire, as a sign-in or sign-out would. */
   emitSessionChange(signedIn: boolean): void
+  /** Makes the password-recovery feed fire, as opening a reset link would. */
+  emitPasswordRecovery(): void
   /** Make the next call of 'group.method' throw. Fires once. */
   failNext(call: string, error?: Error): void
 }
@@ -55,6 +77,7 @@ export type FakeApi = DataPort & {
 const NOW = '2026-01-01T00:00:00Z'
 let seq = 0
 const id = () => `fake-${++seq}`
+const ANSWERS: readonly CheckinAnswer[] = ['planned', 'changed', 'not_cooked', 'dismissed']
 
 /** Row factories: fill in the boring columns so a test states only what matters. */
 export const row = {
@@ -64,7 +87,7 @@ export const row = {
   }),
   batch: (o: Partial<Tables<'batches'>> = {}): Tables<'batches'> => ({
     added_at: NOW, created_at: NOW, created_by: null, deleted_at: null, deleted_by: null, expires_on: null, household_id: 'h1', id: id(),
-    ingredient_id: 'i1', qty: 0, recorded_at: NOW, updated_at: null, updated_by: null, ...o,
+    ingredient_id: 'i1', qty: 0, recorded_at: NOW, shopping_item_id: null, updated_at: null, updated_by: null, ...o,
   }),
   shoppingItem: (o: Partial<Tables<'shopping_items'>> = {}): Tables<'shopping_items'> => ({
     bought_batch_id: null, checked: false, created_at: NOW, created_by: null, deleted_at: null, deleted_by: null, household_id: 'h1', id: id(),
@@ -79,6 +102,10 @@ export const row = {
     not_cooked: false, portions: 2, position: 0, recipe_id: null, skip_shopping: false, slot: 'dinner', updated_at: null, updated_by: null,
     planned_meal_lines: [], recipes: null, ...o,
   }),
+  snapshot: (o: Partial<PantrySnapshotRow> = {}): PantrySnapshotRow => ({
+    created_at: NOW, created_by: null, deleted_at: null, deleted_by: null, household_id: 'h1', id: id(), on_date: '2026-01-05',
+    taken_at: NOW, updated_at: null, updated_by: null, snapshot_batches: [], ...o,
+  }),
 }
 
 export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
@@ -88,12 +115,14 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     householdRow: { id: 'h1', name: 'Casa', invite_code: 'INVITE1' },
     members: [], prefs: null, pushEndpoints: [], pushTest: { sent: 1, gone: 0, failed: 0 },
     ingredients: [], recipeLines: [], batches: [], meals: [], adjustments: [], snapshot: undefined, shoppingItems: [], recipes: [],
-    unreadCheckins: [], savedEdits: [], finishedShopping: [],
+    unreadCheckins: [], deletedUnreadCheckins: [], savedEdits: [], finishedShopping: [], version: undefined,
+    signUpNeedsConfirmation: false, signUpEmails: [], resendEmails: [], resetRequests: [], password: 'password1', recoveryPending: false,
     ...seed,
   }
   const calls: string[] = []
   const listeners = new Set<(by: string | null) => void>()
   const sessionListeners = new Set<(signedIn: boolean) => void>()
+  const recoveryListeners = new Set<() => void>()
   const failures = new Map<string, Error>()
   /** Wraps every method of one port group: logs the call, can be made to fail, and returns a promise. Methods may be sync. */
   const track = <K extends keyof DataPort>(
@@ -115,6 +144,36 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
 
   const live = <T extends { deleted_at: string | null }>(rows: T[]) => rows.filter((r) => !r.deleted_at)
 
+  const now = () => new Date().toISOString()
+  const liveSnapshot = () => (state.snapshot && !state.snapshot.deleted_at ? state.snapshot : undefined)
+  /** What the server's SELECT policy lets through: the snapshot with only its live batch lines. */
+  const visibleSnapshot = () => {
+    const snapshot = liveSnapshot()
+    return snapshot
+      ? { ...snapshot, snapshot_batches: snapshot.snapshot_batches.filter((line) => live(state.batches).some((b) => b.id === line.batch_id)) }
+      : undefined
+  }
+
+  /** The first live purchase of a list item (the server's sync_item_purchase picks by recorded_at, then id). */
+  const firstLivePurchase = (itemId: string, exclude?: string) =>
+    live(state.batches).find((b) => b.shopping_item_id === itemId && b.id !== exclude)
+
+  /**
+   * An answer, as `answer_checkin` does it: "not cooked" also flags the meal (so the replay skips it), and the first
+   * answer clears the shared check-in. Returns whether it cleared an unread one (a retry is false).
+   */
+  const answerCheckin = (mealId: string, answer: CheckinAnswer) => {
+    if (!ANSWERS.includes(answer)) throw new ApiError(`unknown answer ${answer}`, '22023')
+    if (answer === 'not_cooked') {
+      const meal = state.meals.find((m) => m.id === mealId)
+      if (meal) meal.not_cooked = true
+    }
+    const idx = state.unreadCheckins.findIndex((c) => c.planned_meals?.id === mealId)
+    if (idx < 0) return false
+    state.unreadCheckins.splice(idx, 1)
+    return true
+  }
+
   /** `recipeLines` is what usage and the ingredient delete guard read. Keeps it in step with a recipe. Matches by name (shortcut). */
   const syncRecipeLines = (recipe: Recipe, previousName = recipe.name) => {
     state.recipeLines = state.recipeLines.filter((l) => l.recipeName !== previousName)
@@ -123,15 +182,68 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     }
   }
 
+  // ---- Soft delete and its cascade (docs/adr/0003, migrations 20261124100000 and 20261127100000) -------------------
+  const softDeleteBatch = (batch: Tables<'batches'>, stamp: string) => {
+    if (batch.deleted_at) return
+    batch.deleted_at = stamp
+    for (const a of state.adjustments) if (a.batch_id === batch.id && !a.deleted_at) a.deleted_at = stamp
+    // the item that bought this batch goes back to "not bought", or to another live purchase of the same item
+    for (const item of state.shoppingItems) {
+      if (item.deleted_at || item.bought_batch_id !== batch.id) continue
+      item.bought_batch_id = firstLivePurchase(item.id, batch.id)?.id ?? null
+    }
+  }
+
+  const restoreBatch = (batch: Tables<'batches'>, stamp: string) => {
+    batch.deleted_at = null
+    for (const a of state.adjustments) if (a.batch_id === batch.id && a.deleted_at === stamp) a.deleted_at = null
+    // restoring a purchase marks its item bought again when nothing else bought it
+    for (const item of state.shoppingItems) {
+      if (!item.deleted_at && item.bought_batch_id === null && batch.shopping_item_id === item.id) item.bought_batch_id = batch.id
+    }
+  }
+
+  const softDeleteMeal = (meal: PantryMealRow, stamp: string) => {
+    if (meal.deleted_at) return
+    meal.deleted_at = stamp
+    // the meal's own lines and check-in go with it; lines are embedded in the meal so hiding the meal hides them
+    const gone = state.unreadCheckins.filter((c) => c.planned_meals?.id === meal.id)
+    state.unreadCheckins = state.unreadCheckins.filter((c) => !gone.includes(c))
+    state.deletedUnreadCheckins.push(...gone)
+  }
+
+  const restoreMeal = (meal: PantryMealRow) => {
+    meal.deleted_at = null
+    const back = state.deletedUnreadCheckins.filter((c) => c.planned_meals?.id === meal.id)
+    state.deletedUnreadCheckins = state.deletedUnreadCheckins.filter((c) => !back.includes(c))
+    state.unreadCheckins.push(...back)
+  }
+
   const api: DataPort = {
     auth: track('auth', {
       currentUserId: () => state.userId,
       session: (): AuthSession | null => (state.userId ? { userId: state.userId, metadata: {} } : null),
       // shortcut: no password check; the fake accepts any sign-in (a test that needs a refusal uses failNext)
-      signIn: () => {},
-      signUp: () => {},
+      signIn: () => { state.recoveryPending = false },
+      signUp: (email) => {
+        state.signUpEmails.push(email)
+        // Confirm email on: the account exists, but there is no session to sign in with.
+        if (state.signUpNeedsConfirmation) {
+          state.userId = null
+          return { needsConfirmation: true }
+        }
+        return { needsConfirmation: false }
+      },
+      resendConfirmation: (email) => { state.resendEmails.push(email) },
+      requestPasswordReset: (email, redirectTo) => { state.resetRequests.push({ email, redirectTo }) },
+      updatePassword: (password) => {
+        if (!state.userId) throw new ApiError('not signed in', '401')
+        state.password = password
+        state.recoveryPending = false
+      },
+      recoveryPending: () => state.recoveryPending,
       signInWithGoogle: () => {},
-      signOut: () => { state.userId = null },
+      signOut: () => { state.userId = null; state.recoveryPending = false },
       // shortcut: the fake's user always exists
       verifyUser: () => 'ok' as const,
     }),
@@ -142,7 +254,10 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
       rotateInviteCode: () => {
         if (state.householdRow) state.householdRow.invite_code = `ROTATED-${++seq}`
       },
-      create: (name) => { state.householdRow = { id: 'h-new', name, invite_code: 'NEWCODE' } },
+      create: (name, _displayName, timezone) => {
+        state.householdRow = { id: 'h-new', name, invite_code: 'NEWCODE' }
+        state.household.timezone = timezone ?? 'Europe/Rome'
+      },
       join: (code) => {
         if (code !== state.householdRow?.invite_code) throw new ApiError('invalid invite code')
       },
@@ -156,7 +271,7 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
       list: () => [...live(state.recipes)].sort((a, b) => a.name.localeCompare(b.name)),
       options: () => [...live(state.recipes)].sort((a, b) => a.name.localeCompare(b.name)).map((r) => ({ id: r.id, name: r.name, serves: r.serves })),
       planned: (recipeId) => {
-        const cutoff = state.snapshot?.on_date
+        const cutoff = liveSnapshot()?.on_date
         return live(state.meals)
           .filter((m) => m.recipe_id === recipeId && (!cutoff || m.date > cutoff))
           .sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot))
@@ -219,10 +334,34 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         batches: live(state.batches),
         meals: live(state.meals),
         adjustments: live(state.adjustments),
-        snapshot: state.snapshot,
+        snapshot: visibleSnapshot(),
         ingredients: live(state.ingredients),
+        version: state.version,
       }),
-      saveEdits: (edits) => { state.savedEdits.push(edits) },
+      saveEdits: (edits) => {
+        state.savedEdits.push(edits)
+        // validate before writing, as the RPC does
+        if (edits.newBatches.some((b) => !(b.qty > 0))) throw new ApiError('amount must be more than zero', '22023')
+        const stamp = now()
+        for (const a of edits.adjustments) {
+          // adjustments for a batch deleted meanwhile are skipped, as the RPC's live-batch check does
+          if (!live(state.batches).some((b) => b.id === a.batch_id)) continue
+          state.adjustments.push({
+            at: stamp, batch_id: a.batch_id, created_at: stamp, created_by: state.userId, deleted_at: null, deleted_by: null,
+            household_id: state.household.id, id: id(), ingredient_id: a.ingredient_id, kind: a.kind,
+            qty: a.kind === 'set' ? a.qty : null, recorded_at: stamp, updated_at: null, updated_by: null,
+          })
+        }
+        for (const b of edits.newBatches) {
+          state.batches.push(row.batch({
+            added_at: stamp, created_at: stamp, expires_on: b.expires_on, ingredient_id: b.ingredient_id, qty: b.qty, recorded_at: stamp,
+          }))
+        }
+        for (const e of edits.expiries) {
+          const batch = state.batches.find((b) => b.id === e.batch_id)
+          if (batch) batch.expires_on = e.expires_on
+        }
+      },
     }),
     shop: track('shop', {
       list: () =>
@@ -238,31 +377,51 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
         if (m) m.skip_shopping = skip
       },
       buy: (b) => {
-        if (!state.batches.some((x) => x.id === b.batchId)) {
-          state.batches.push(row.batch({ id: b.batchId, ingredient_id: b.ingredientId, qty: b.qty, expires_on: b.expiresOn, added_at: b.addedAt }))
-        }
+        // Mirrors buy_shopping_item (MR-003): the item names the ingredient, and it must be a live ingredient item.
+        if (!(b.qty > 0)) throw new ApiError('amount must be more than zero', '22023')
         const item = b.shoppingItemId ? live(state.shoppingItems).find((i) => i.id === b.shoppingItemId) : undefined
-        if (item) { item.checked = true; item.bought_batch_id = b.batchId }
-        return { itemFound: !b.shoppingItemId || !!item }
+        if (b.shoppingItemId && !item) throw new ApiError(`shopping item ${b.shoppingItemId} is missing or deleted`, '23503')
+        if (item && !item.ingredient_id) throw new ApiError('free-text shopping item has no ingredient to buy', '22023')
+        if (!state.batches.some((x) => x.id === b.batchId)) {
+          state.batches.push(row.batch({
+            id: b.batchId,
+            ingredient_id: item ? item.ingredient_id! : b.ingredientId,
+            shopping_item_id: item?.id ?? null,
+            qty: b.qty,
+            expires_on: b.expiresOn,
+            added_at: b.addedAt,
+          }))
+        }
+        // The partner bought it first when another live purchase points at the same item (a retry of this batch does not count).
+        const alreadyPurchased = !!item && live(state.batches).some((x) => x.shopping_item_id === item.id && x.id !== b.batchId)
+        const own = state.batches.find((x) => x.id === b.batchId)
+        if (item) {
+          // The RPC only moves the bought pointer: a purchase does not tick the item's `checked` box.
+          // A retried buy of a batch that was returned must not relink it (the server only links a live batch).
+          if (!item.bought_batch_id && own && !own.deleted_at) item.bought_batch_id = b.batchId
+        }
+        return { batchId: b.batchId, alreadyPurchased }
       },
       setChecked: (itemId, checked) => {
         const i = state.shoppingItems.find((x) => x.id === itemId)
         if (i) i.checked = checked
       },
       unbuy: (batchId) => {
-        state.batches = state.batches.filter((b) => b.id !== batchId)
-        for (const i of state.shoppingItems) if (i.bought_batch_id === batchId) { i.checked = false; i.bought_batch_id = null }
+        // Mirrors unbuy + sync_item_purchase: the item stays bought while another live purchase points at it, and goes
+        // back on the list only when the last one is returned. `checked` is the user's box, not the purchase pointer.
+        const batch = state.batches.find((b) => b.id === batchId)
+        if (!batch || batch.deleted_at) return
+        batch.deleted_at = NOW
+        for (const i of state.shoppingItems) {
+          if (i.bought_batch_id !== batchId && batch.shopping_item_id !== i.id) continue
+          const other = firstLivePurchase(i.id)
+          i.bought_batch_id = other?.id ?? null
+        }
       },
     }),
     checkins: track('checkins', {
       unread: () => [...state.unreadCheckins],
-      // shortcut: the answer itself is not recorded; only whether the check-in was cleared
-      answer: (mealId) => {
-        const idx = state.unreadCheckins.findIndex((c) => c.planned_meals?.id === mealId)
-        if (idx < 0) return false
-        state.unreadCheckins.splice(idx, 1)
-        return true
-      },
+      answer: (mealId, answer) => answerCheckin(mealId, answer),
       setNotCooked: (mealId, notCooked) => {
         const m = state.meals.find((x) => x.id === mealId)
         if (m) m.not_cooked = notCooked
@@ -276,9 +435,32 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
       },
       slotEndTimes: () => ({ slots: state.household.slots, slot_end_times: state.household.slot_end_times }),
       saveSlotEndTimes: (times) => { state.household.slot_end_times = times },
-      finishShopping: (onDate, batches, answers) => {
-        state.finishedShopping.push({ onDate, batches, answers })
+      finishShopping: (onDate, batches, answers, expectedAt) => {
+        // Mirrors the server transaction (MR-005, MR-003): stale version, unknown batch, then answers, snapshot,
+        // trip reset, bought-item sweep and every check-in still unread counting as cooked as planned.
+        if ((expectedAt ?? undefined) !== state.version) throw new ApiError(PANTRY_CHANGED_MESSAGE, VERSION_CONFLICT)
+        const unknown = batches.find((b) => !live(state.batches).some((x) => x.id === b.batch_id))
+        if (unknown) throw new ApiError(`snapshot names unknown batch ${unknown.batch_id}`, '23503')
+        // validate every answer before touching anything, as the transaction does
+        for (const a of answers) if (!ANSWERS.includes(a.answer)) throw new ApiError(`unknown answer ${a.answer}`, '22023')
+        for (const a of answers) answerCheckin(a.meal_id, a.answer)
+        state.snapshot = row.snapshot({
+          id: id(),
+          on_date: onDate,
+          taken_at: now(),
+          snapshot_batches: batches.map((b) => ({ batch_id: b.batch_id, qty: b.qty })),
+        })
+        // Clear the cart: every live item that is bought or has a live purchase pointing at it.
+        for (const item of state.shoppingItems) {
+          if (item.deleted_at) continue
+          if (item.bought_batch_id || live(state.batches).some((b) => b.shopping_item_id === item.id)) item.deleted_at = now()
+        }
+        for (const m of state.meals) if (m.skip_shopping) m.skip_shopping = false
+        // everything still unread counts as cooked as planned
         state.unreadCheckins = []
+        // the transaction touches the household clock, so a retry with the old version conflicts
+        state.version = `${now()}#${++seq}`
+        state.finishedShopping.push({ onDate, batches, answers, expectedAt })
       },
     }),
     live: {
@@ -289,6 +471,10 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
       onSessionChange: (onChange: (signedIn: boolean) => void) => {
         sessionListeners.add(onChange)
         return () => { sessionListeners.delete(onChange) }
+      },
+      onPasswordRecovery: (cb: () => void) => {
+        recoveryListeners.add(cb)
+        return () => { recoveryListeners.delete(cb) }
       },
     },
     account: track('account', {
@@ -306,28 +492,68 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     }),
     trash: track('trash', {
       softDelete: (table, ids) => {
+        const stamp = now()
         if (table === 'ingredients') {
           for (const ingredientId of ids) {
             if (state.recipeLines.some((l) => l.ingredientId === ingredientId)) throw new ApiError('still referenced', '23503')
           }
-          for (const i of state.ingredients) if (ids.includes(i.id)) i.deleted_at = NOW
-        }
-        if (table === 'recipes') {
-          // a live planned meal still points at the recipe: the FK refuses, as in the database
-          for (const id of ids) {
-            if (live(state.meals).some((m) => m.recipe_id === id)) throw new ApiError('still referenced', '23503')
+          for (const ingredient of state.ingredients) {
+            if (!ids.includes(ingredient.id) || ingredient.deleted_at) continue
+            ingredient.deleted_at = stamp
+            // the server's cascade: batches, adjustments and shopping items go with the ingredient
+            for (const batch of state.batches) if (batch.ingredient_id === ingredient.id) softDeleteBatch(batch, stamp)
+            for (const a of state.adjustments) if (a.ingredient_id === ingredient.id && !a.deleted_at) a.deleted_at = stamp
+            for (const item of state.shoppingItems) if (item.ingredient_id === ingredient.id && !item.deleted_at) item.deleted_at = stamp
           }
-          for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = NOW; syncRecipeLines(r) }
+        } else if (table === 'recipes') {
+          // a live planned meal still points at the recipe: the FK refuses, as in the database
+          for (const recipeId of ids) {
+            if (live(state.meals).some((m) => m.recipe_id === recipeId)) throw new ApiError('still referenced', '23503')
+          }
+          for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = stamp; syncRecipeLines(r) }
+        } else if (table === 'planned_meals') {
+          for (const meal of state.meals) if (ids.includes(meal.id)) softDeleteMeal(meal, stamp)
+        } else if (table === 'batches') {
+          for (const batch of state.batches) if (ids.includes(batch.id)) softDeleteBatch(batch, stamp)
+        } else if (table === 'adjustments') {
+          for (const a of state.adjustments) if (ids.includes(a.id) && !a.deleted_at) a.deleted_at = stamp
+        } else if (table === 'snapshots') {
+          if (state.snapshot && ids.includes(state.snapshot.id) && !state.snapshot.deleted_at) state.snapshot.deleted_at = stamp
+        } else if (table === 'shopping_items') {
+          for (const item of state.shoppingItems) if (ids.includes(item.id) && !item.deleted_at) item.deleted_at = stamp
+        } else {
+          // recipe_ingredients has no addressable rows here: its lines live inside their recipe (and hide with it)
+          throw new ApiError('not faked: trash.softDelete')
         }
-        if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = NOW
-        if (table === 'shopping_items') for (const i of state.shoppingItems) if (ids.includes(i.id)) i.deleted_at = NOW
-        // shortcut: the other tables are not faked yet; add them with the first test that needs them
       },
       restore: (table, ids) => {
-        if (table === 'ingredients') for (const i of state.ingredients) if (ids.includes(i.id)) i.deleted_at = null
-        if (table === 'recipes') for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = null; syncRecipeLines(r) }
-        if (table === 'planned_meals') for (const m of state.meals) if (ids.includes(m.id)) m.deleted_at = null
-        if (table === 'shopping_items') for (const i of state.shoppingItems) if (ids.includes(i.id)) i.deleted_at = null
+        if (table === 'ingredients') {
+          for (const ingredient of state.ingredients) {
+            if (!ids.includes(ingredient.id) || !ingredient.deleted_at) continue
+            const stamp = ingredient.deleted_at
+            ingredient.deleted_at = null
+            for (const batch of state.batches) if (batch.ingredient_id === ingredient.id && batch.deleted_at === stamp) restoreBatch(batch, stamp)
+            for (const a of state.adjustments) if (a.ingredient_id === ingredient.id && a.deleted_at === stamp) a.deleted_at = null
+            for (const item of state.shoppingItems) if (item.ingredient_id === ingredient.id && item.deleted_at === stamp) item.deleted_at = null
+          }
+        } else if (table === 'recipes') {
+          for (const r of state.recipes) if (ids.includes(r.id)) { r.deleted_at = null; syncRecipeLines(r) }
+        } else if (table === 'planned_meals') {
+          for (const meal of state.meals) if (ids.includes(meal.id)) restoreMeal(meal)
+        } else if (table === 'batches') {
+          for (const batch of state.batches) {
+            if (!ids.includes(batch.id) || !batch.deleted_at) continue
+            restoreBatch(batch, batch.deleted_at)
+          }
+        } else if (table === 'adjustments') {
+          for (const a of state.adjustments) if (ids.includes(a.id)) a.deleted_at = null
+        } else if (table === 'snapshots') {
+          if (state.snapshot && ids.includes(state.snapshot.id)) state.snapshot.deleted_at = null
+        } else if (table === 'shopping_items') {
+          for (const item of state.shoppingItems) if (ids.includes(item.id)) item.deleted_at = null
+        } else {
+          throw new ApiError('not faked: trash.restore')
+        }
       },
     }),
   }
@@ -338,5 +564,6 @@ export function createFakeAdapter(seed: Partial<FakeState> = {}): FakeApi {
     calls,
     emitHouseholdEvent: (by) => { for (const l of listeners) l(by) },
     emitSessionChange: (signedIn) => { for (const l of sessionListeners) l(signedIn) },
+    emitPasswordRecovery: () => { state.recoveryPending = true; for (const l of recoveryListeners) l() },
     failNext: (call, error = new Error(`fake failure: ${call}`)) => void failures.set(call, error) }
 }

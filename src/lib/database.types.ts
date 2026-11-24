@@ -57,14 +57,14 @@ isOneToOne: false
                   ]
                 },"batches": {
                   Row: {
-                    "added_at": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number,"recorded_at": string,"updated_at": string | null,"updated_by": string | null
+                    "added_at": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"deleted_by": string | null,"expires_on": string | null,"household_id": string,"id": string,"ingredient_id": string,"qty": number,"recorded_at": string,"shopping_item_id": string | null,"updated_at": string | null,"updated_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id": string,"qty": number,"recorded_at"?: string,"shopping_item_id"?: string | null,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Update: {
-                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number,"recorded_at"?: string,"updated_at"?: string | null,"updated_by"?: string | null
+                    "added_at"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"deleted_by"?: string | null,"expires_on"?: string | null,"household_id"?: string,"id"?: string,"ingredient_id"?: string,"qty"?: number,"recorded_at"?: string,"shopping_item_id"?: string | null,"updated_at"?: string | null,"updated_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -78,6 +78,12 @@ isOneToOne: false
       columns: ["household_id","ingredient_id"]
 isOneToOne: false
       referencedRelation: "ingredients"
+      referencedColumns: ["household_id","id"]
+    },{
+      foreignKeyName: "batches_shopping_item_fkey"
+      columns: ["household_id","shopping_item_id"]
+isOneToOne: false
+      referencedRelation: "shopping_items"
       referencedColumns: ["household_id","id"]
     }
                   ]
@@ -461,7 +467,7 @@ isOneToOne: false
 { Args: { "p_answer": string,"p_meal": string }; Returns: boolean
                            },
 "buy_shopping_item":
-{ Args: { "added_at": string,"batch_id": string,"expires_on": string,"ingredient_id": string,"item_id": string,"qty": number }; Returns: Json
+{ Args: { "added_at": string,"batch_id": string,"expires_on": string,"item_id": string,"qty": number }; Returns: Json
                            },
 "checkin_answer_all":
 { Args: { "p_answer": string }; Returns: number
@@ -479,7 +485,7 @@ isOneToOne: false
 { Args: { "hid": string }; Returns: number
                            },
 "create_household":
-{ Args: { "display_name"?: string,"name": string }; Returns: string
+{ Args: { "display_name"?: string,"name": string,"timezone"?: string }; Returns: string
                            },
 "default_member_name":
 { Args: Record<PropertyKey, never>; Returns: string
@@ -488,10 +494,16 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
 "finish_shopping":
-{ Args: { "answers"?: Json,"batches": Json,"on_date": string }; Returns: string
+{ Args: { "answers": Json,"batches": Json,"expected_at": string,"on_date": string }; Returns: string
                            },
 "hook_before_user_created":
 { Args: { "event": Json }; Returns: Json
+                           },
+"household_today":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
+"household_version":
+{ Args: Record<PropertyKey, never>; Returns: string
                            },
 "join_household":
 { Args: { "code": string,"display_name"?: string }; Returns: string

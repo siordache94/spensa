@@ -221,13 +221,13 @@ set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000e2"}';
 do $$ begin
   assert (select count(*) from public.meal_checkins where answered_at is null) = 3, 'three unread before finishing';
   -- a bad answer aborts the whole thing: nothing answered, no snapshot
-  begin perform public.finish_shopping('2026-11-27', '[]', '[{"meal_id":"a1000000-0000-0000-0000-000000000001","answer":"planned"},{"meal_id":"a1000000-0000-0000-0000-000000000002","answer":"changed"}]');
+  begin perform public.finish_shopping(public.household_today(), '[]', '[{"meal_id":"a1000000-0000-0000-0000-000000000001","answer":"planned"},{"meal_id":"a1000000-0000-0000-0000-000000000002","answer":"changed"}]', public.household_version());
     assert false, 'bad finish answer accepted';
   exception when invalid_parameter_value then null; end;
   assert (select count(*) from public.meal_checkins where answered_at is null) = 3, 'failed finish answered something';
   assert (select count(*) from public.snapshots) = 0, 'failed finish left a snapshot';
   -- good: one meal answered not_cooked, one planned; the third is left and must be cleared as planned
-  perform public.finish_shopping('2026-11-27', '[]', '[{"meal_id":"a1000000-0000-0000-0000-000000000001","answer":"not_cooked"},{"meal_id":"a1000000-0000-0000-0000-000000000002","answer":"planned"}]');
+  perform public.finish_shopping(public.household_today(), '[]', '[{"meal_id":"a1000000-0000-0000-0000-000000000001","answer":"not_cooked"},{"meal_id":"a1000000-0000-0000-0000-000000000002","answer":"planned"}]', public.household_version());
   assert (select count(*) from public.snapshots) = 1, 'snapshot not saved';
   assert (select count(*) from public.meal_checkins where answered_at is null) = 0, 'unread left after finishing';
   assert (select answer from public.meal_checkins where planned_meal_id = 'a1000000-0000-0000-0000-000000000001') = 'not_cooked';
@@ -235,8 +235,8 @@ do $$ begin
   assert (select answer from public.meal_checkins where planned_meal_id = 'a1000000-0000-0000-0000-000000000002') = 'planned';
   assert (select answer from public.meal_checkins where planned_meal_id = 'a1000000-0000-0000-0000-000000000003') = 'planned', 'leftover not cleared as planned';
   assert (select not_cooked from public.planned_meals where id = 'a1000000-0000-0000-0000-000000000003') = false, 'leftover flagged';
-  -- the old two-argument call still works (answers default to none)
-  perform public.finish_shopping('2026-11-28', '[]');
+  -- answers default to none; the version is re-read for each call
+  perform public.finish_shopping(public.household_today(), '[]', '[]', public.household_version());
   assert (select count(*) from public.snapshots) = 2;
 end $$;
 -- finishing in household B leaves A alone
@@ -249,7 +249,7 @@ end $$;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-0000000000f1"}';
 do $$ begin
-  perform public.finish_shopping('2026-11-27', '[]');
+  perform public.finish_shopping(public.household_today(), '[]', '[]', public.household_version());
 end $$;
 reset role;
 do $$ begin
@@ -279,9 +279,19 @@ do $$ begin
   perform public.restore('planned_meals', array['a1000000-0000-0000-0000-000000000002']::uuid[]);
   assert (select count(*) from public.meal_checkins where answered_at is null) = 2, 'restore did not bring the check-in back';
   assert (select count(*) from public.planned_meal_lines where planned_meal_id = 'a1000000-0000-0000-0000-000000000002') = 1, 'restore did not bring the lines back';
-  -- a line under a deleted ingredient goes with it (the recipe check does not apply: no recipe uses cheese)
+  -- a live per-meal line guards its ingredient too (MR-046): deleting it must not silently change the meal
+  begin
+    perform public.soft_delete('ingredients', array['a0000000-0000-0000-0000-000000000002']::uuid[]);
+    assert false, 'ingredient delete should be blocked while a live meal line uses it';
+  exception when foreign_key_violation then
+    assert sqlerrm = 'ingredient is used by a planned meal', 'wrong message: ' || sqlerrm;
+  end;
+  assert (select count(*) from public.planned_meal_lines where planned_meal_id = 'a1000000-0000-0000-0000-000000000002') = 1,
+    'the blocked delete must leave the meal line alone';
+  -- once the line is gone (the person edited the meal), the ingredient can go
+  delete from public.planned_meal_lines where planned_meal_id = 'a1000000-0000-0000-0000-000000000002';
   perform public.soft_delete('ingredients', array['a0000000-0000-0000-0000-000000000002']::uuid[]);
-  assert (select count(*) from public.planned_meal_lines where planned_meal_id = 'a1000000-0000-0000-0000-000000000002') = 0, 'line outlived its ingredient';
+  assert (select count(*) from public.ingredients where id = 'a0000000-0000-0000-0000-000000000002') = 0, 'ingredient delete after the line was removed';
 end $$;
 
 -- Data export includes the new tables -------------------------------------------------------------------------------------
