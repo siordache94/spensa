@@ -9,7 +9,9 @@
 # Usage:
 #   scripts/deploy-supabase.sh [all|db|functions] [--yes] [--dry-run]
 #
-# Access token: `supabase login` with the account that owns the project, or $SUPABASE_ACCESS_TOKEN.
+# Access token: $SUPABASE_ACCESS_TOKEN (a project-account PAT), else the CLI login.
+#   A token set in .env.local or .env.deploy is loaded automatically, so this directory can use the Spensa
+#   account while the CLI stays logged in to another account for other work. Keep the file gitignored.
 # Database password: v3 uses a temporary login role; if you pass SUPABASE_DB_URL, it must contain the password.
 # IPv4-only network: put the dashboard's Session pooler URI in $SUPABASE_DB_URL.
 set -euo pipefail
@@ -32,6 +34,28 @@ for arg in "$@"; do
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $arg" >&2; usage >&2; exit 2 ;;
   esac
+done
+
+# Load only the keys this script needs from local files; do not source them as shell.
+for env_file in .env.deploy .env.local; do
+  [ -f "$env_file" ] || continue
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      SUPABASE_ACCESS_TOKEN=*|SUPABASE_DB_URL=*|SUPABASE_DB_PASSWORD=*)
+        key="${line%%=*}"
+        value="${line#*=}"
+        value="${value%\"}"; value="${value#\"}"
+        value="${value%\'}"; value="${value#\'}"
+        current=""
+        case "$key" in
+          SUPABASE_ACCESS_TOKEN) current="${SUPABASE_ACCESS_TOKEN:-}" ;;
+          SUPABASE_DB_URL) current="${SUPABASE_DB_URL:-}" ;;
+          SUPABASE_DB_PASSWORD) current="${SUPABASE_DB_PASSWORD:-}" ;;
+        esac
+        [ -n "$current" ] || export "$key=$value"
+        ;;
+    esac
+  done < "$env_file"
 done
 
 command -v supabase >/dev/null 2>&1 || {
@@ -93,9 +117,9 @@ run_db_push() {
     case "$out" in
       *privileges*)
         echo >&2
-        echo "The CLI token cannot access $ref. Log in with the account that owns it:" >&2
-        echo "  supabase login        # then rerun this script" >&2
-        echo "  # or: SUPABASE_ACCESS_TOKEN=<personal access token> npm run deploy:supabase" >&2
+        echo "The CLI token cannot access $ref. Use a PAT from the owning account:" >&2
+        echo "  echo 'SUPABASE_ACCESS_TOKEN=sbp_...' >> .env.local   # gitignored" >&2
+        echo "  npm run deploy:supabase" >&2
         ;;
       *IPv6*)
         echo >&2
