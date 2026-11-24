@@ -11,6 +11,7 @@ import NotificationSettings from '../components/NotificationSettings.tsx'
 import { useSettings, type Density, type ThemeName } from '../lib/settings.ts'
 import { useSaveSlotEndTimes, useSlotEndTimes } from '../lib/api/checkins.ts'
 import { isEndTime, slotLabel } from '../lib/checkin.ts'
+import { initialSlotTimes, slotTimeEdit, slotTimesChanged, slotTimesPayload, slotTimesValid } from '../lib/slotTimesForm.ts'
 import './lists.css'
 
 const notifyFailure = (title: string) => (e: Error) => notifications.show({ color: 'red', title, message: e.message })
@@ -167,9 +168,9 @@ function SlotEndTimes() {
 
 function SlotTimesForm({ slots, endTimes }: { slots: string[]; endTimes: Record<string, string> }) {
   const save = useSaveSlotEndTimes()
-  const [times, setTimes] = useState<Record<string, string>>(() => ({ ...endTimes }))
-  const valid = slots.every((s) => isEndTime(times[s] ?? ''))
-  const changed = slots.some((s) => times[s] !== endTimes[s])
+  const [times, setTimes] = useState<Record<string, string>>(() => initialSlotTimes(endTimes))
+  const valid = slotTimesValid(slots, times)
+  const changed = slotTimesChanged(slots, times, endTimes)
   return (
     <Stack gap="md">
       <h3 className="sp-lhead">Meal end times</h3>
@@ -180,14 +181,15 @@ function SlotTimesForm({ slots, endTimes }: { slots: string[]; endTimes: Record<
           label={slotLabel(s)}
           value={times[s] ?? ''}
           error={isEndTime(times[s] ?? '') ? undefined : 'Pick a time'}
-          onChange={(e) => setTimes((t) => ({ ...t, [s]: e.currentTarget.value }))}
+          // The updater is built from the event now; React may run it later, when currentTarget is null.
+          onChange={(e) => setTimes(slotTimeEdit(e, s))}
           w={160}
         />
       ))}
       <Button
         loading={save.isPending}
         disabled={!valid || !changed}
-        onClick={() => save.mutate(Object.fromEntries(slots.map((s) => [s, times[s]])), { onError: notifyFailure('Could not save') })}
+        onClick={() => save.mutate(slotTimesPayload(slots, times), { onError: notifyFailure('Could not save') })}
       >
         Save meal end times
       </Button>
