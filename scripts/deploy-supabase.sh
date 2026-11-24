@@ -9,8 +9,9 @@
 # Usage:
 #   scripts/deploy-supabase.sh [all|db|functions] [--yes] [--dry-run]
 #
-# Access token: `supabase login`, or $SUPABASE_ACCESS_TOKEN.
-# Database password: prompted for, or $SUPABASE_DB_PASSWORD.
+# Access token: `supabase login` with the account that owns the project, or $SUPABASE_ACCESS_TOKEN.
+# Database password: v3 uses a temporary login role; if you pass SUPABASE_DB_URL, it must contain the password.
+# IPv4-only network: put the dashboard's Session pooler URI in $SUPABASE_DB_URL.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -78,17 +79,41 @@ if [ "$dry_run" -eq 0 ] && [ "$assume_yes" -eq 0 ]; then
   esac
 fi
 
-db_cmd=(supabase db push --remote="$ref")
-if [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
+# A pooler URI is the fallback for IPv4-only networks (the direct host is IPv6-only).
+db_cmd=(supabase db push --remote="${SUPABASE_DB_URL:-$ref}")
+if [ -z "${SUPABASE_DB_URL:-}" ] && [ -n "${SUPABASE_DB_PASSWORD:-}" ]; then
   db_cmd+=(--password "$SUPABASE_DB_PASSWORD")
 fi
+
+run_db_push() {
+  local out status=0
+  out="$("${db_cmd[@]}" "$@" 2>&1)" || status=$?
+  printf '%s\n' "$out"
+  if [ "$status" -ne 0 ]; then
+    case "$out" in
+      *privileges*)
+        echo >&2
+        echo "The CLI token cannot access $ref. Log in with the account that owns it:" >&2
+        echo "  supabase login        # then rerun this script" >&2
+        echo "  # or: SUPABASE_ACCESS_TOKEN=<personal access token> npm run deploy:supabase" >&2
+        ;;
+      *IPv6*)
+        echo >&2
+        echo "This network has no IPv6 and the direct database host is IPv6-only." >&2
+        echo "Copy the Session pooler URI from Dashboard > Connect and rerun:" >&2
+        echo "  SUPABASE_DB_URL='postgresql://...' npm run deploy:supabase" >&2
+        ;;
+    esac
+    return "$status"
+  fi
+}
 
 if [ "$target" = "all" ] || [ "$target" = "db" ]; then
   echo "==> Migrations"
   if [ "$dry_run" -eq 1 ]; then
-    "${db_cmd[@]}" --dry-run
+    run_db_push --dry-run
   else
-    "${db_cmd[@]}"
+    run_db_push
   fi
 fi
 
